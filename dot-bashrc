@@ -79,7 +79,7 @@ fi
 ### rugygem-0.9.4 instll
 ### ruby setup.rb all --prefix=/mnt/archive/usr/rubygems --rbdir=/mnt/archive/usr/rubygems/lib/site_ruby/1.8 --sodir=/mnt/archive/usr/rubygems/lib/site_ruby/1.8/x86_64-linux
 
-export PATH=/home/hjlee/usr/git/bin:${PATH}:/var/lib/gems/1.8/bin:/home/hjlee/bin:/home/hjlee/usr/jruby/bin:.
+export PATH=/home/hjlee/usr/git/bin:${PATH}:/var/lib/gems/1.8/bin:/home/hjlee/bin:/home/hjlee/usr/bin:/home/hjlee/usr/jruby/bin:.
 
 # PREFIX=/mnt/archive/usr/rubygems
 # export GEM_HOME=$PREFIX/lib/ruby/gems/1.8
@@ -188,10 +188,10 @@ function rails_production() {
 
 ###########
 ### ruby1.9
-# function ruby19() {
-#     export PATH=/mnt/archive/usr/ruby-1.9.0/bin:${PATH}
-#     PS1="-ruby1.9- \w\$ "
-# }
+function ruby19() {
+    export PATH=/mnt/archive/usr/ruby-1.9.0/bin:${PATH}
+    PS1="-ruby1.9- \w\$ "
+}
 
 function rubysvn() {
     export PATH=/mnt/archive/usr/ruby-svn$1/bin:${PATH}
