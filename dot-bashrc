@@ -1,0 +1,199 @@
+# ~/.bashrc: executed by bash(1) for non-login shells.
+# see /usr/share/doc/bash/examples/startup-files (in the package bash-doc)
+# for examples
+
+# If not running interactively, don't do anything
+[ -z "$PS1" ] && return
+
+# don't put duplicate lines in the history. See bash(1) for more options
+export HISTCONTROL=ignoredups
+# ... and ignore same sucessive entries.
+export HISTCONTROL=ignoreboth
+
+# check the window size after each command and, if necessary,
+# update the values of LINES and COLUMNS.
+shopt -s checkwinsize
+
+# make less more friendly for non-text input files, see lesspipe(1)
+[ -x /usr/bin/lesspipe ] && eval "$(lesspipe)"
+
+# set variable identifying the chroot you work in (used in the prompt below)
+if [ -z "$debian_chroot" ] && [ -r /etc/debian_chroot ]; then
+    debian_chroot=$(cat /etc/debian_chroot)
+fi
+
+# set a fancy prompt (non-color, unless we know we "want" color)
+case "$TERM" in
+xterm-color)
+    PS1='${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+    ;;
+*)
+    PS1='${debian_chroot:+($debian_chroot)}\u@\h:\w\$ '
+    ;;
+esac
+
+# Comment in the above and uncomment this below for a color prompt
+#PS1='${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+
+# If this is an xterm set the title to user@host:dir
+case "$TERM" in
+xterm*|rxvt*)
+    PROMPT_COMMAND='echo -ne "\033]0;${USER}@${HOSTNAME}: ${PWD/$HOME/~}\007"'
+    ;;
+*)
+    ;;
+esac
+
+# Alias definitions.
+# You may want to put all your additions into a separate file like
+# ~/.bash_aliases, instead of adding them here directly.
+# See /usr/share/doc/bash-doc/examples in the bash-doc package.
+
+#if [ -f ~/.bash_aliases ]; then
+#    . ~/.bash_aliases
+#fi
+
+# enable color support of ls and also add handy aliases
+if [ "$TERM" != "dumb" ]; then
+    eval "`dircolors -b`"
+    alias ls='ls --color=auto'
+    #alias dir='ls --color=auto --format=vertical'
+    #alias vdir='ls --color=auto --format=long'
+fi
+
+# some more ls aliases
+#alias ll='ls -l'
+#alias la='ls -A'
+#alias l='ls -CF'
+
+# enable programmable completion features (you don't need to enable
+# this, if it's already enabled in /etc/bash.bashrc and /etc/profile
+# sources /etc/bash.bashrc).
+if [ -f /etc/bash_completion ]; then
+    . /etc/bash_completion
+fi
+
+
+###########
+
+### rugygem-0.9.4 instll
+### ruby setup.rb all --prefix=/mnt/archive/usr/rubygems --rbdir=/mnt/archive/usr/rubygems/lib/site_ruby/1.8 --sodir=/mnt/archive/usr/rubygems/lib/site_ruby/1.8/x86_64-linux
+
+export PATH=/home/hjlee/usr/git/bin:${PATH}:/var/lib/gems/1.8/bin:/home/hjlee/bin:/home/hjlee/usr/jruby/bin:.
+
+# PREFIX=/mnt/archive/usr/rubygems
+# export GEM_HOME=$PREFIX/lib/ruby/gems/1.8
+# export RUBYLIB=$PREFIX/lib/ruby:$PREFIX/lib/site_ruby/1.8
+
+# # export PATH=/var/lib/gems/1.8/bin/:${PATH}
+
+# export PATH=${PREFIX}/bin:${GEM_HOME}/bin:${PATH}
+
+
+# # export GEM_HOME=/mnt/archive/usr/rubygems/gems
+
+export RUBYOPT='-Ku -rubygems'
+
+export JRUBY_OPTS='-Ku -rubygems'
+
+#umask 002
+
+#export EDITOR=emacs
+export EDITOR=dtemacs
+
+export LESSCHARSET=utf-8
+
+export CDDA_DEVICE=/dev/cdrom
+
+# export RUBYLIB=/home/hjlee/work/programming/nurigeul
+
+
+####
+#### java
+####
+
+export JAVA_MEM=-Xmx1024m
+export JAVA_STACK=-Xss2048k
+
+CLASSPATH_SOURCE=~/bin/my_classpath.sh
+if [ -f $CLASSPATH_SOURCE ]; then
+    . $CLASSPATH_SOURCE
+fi
+
+
+
+# export SP_ENCODING=euc-kr
+
+export CVS_RSH=ssh
+
+export CVSROOT=/home/hjlee/CVSROOTS
+
+
+
+export UNZIP=-Ocp949
+
+
+# export RAILS_ENV=production
+
+# for qemu
+export SDL_VIDEO_X11_DGAMOUSE=0
+
+
+alias ls='ls -F'
+alias ll='ls -l'
+
+#alias emacs='LANG=en_US.UTF-8 /usr/bin/emacs-snapshot-x'
+#alias emacs="XMODIFIERS='' /usr/bin/emacs-snapshot-x"
+# alias emacs="XMODIFIERS='' /mnt/archive/usr/emacs22/bin/emacs"
+alias emacs="XMODIFIERS='' /usr/bin/emacs"
+alias e=emacs
+alias h=history
+alias rm='rm -i'
+alias mv='mv -i'
+alias cp='cp -i'
+
+# alias mem='cat /proc/meminfo'
+
+alias la='ls -a'
+alias lstl='ls -tl | less'
+alias lsatl='ls -atl | less'
+alias lstla='ls -atl | less'
+alias lssl='ls -Sl | less'
+
+alias dusl='du $* | sort -nr | less'
+
+alias l='zless'
+
+alias ko='LANG=ko_KR'
+alias ko.utf8='LANG=ko_KR.UTF-8'
+alias en='LANG=en_US'
+alias en.utf8='LANG=en_US.UTF-8'
+
+###
+# ko_KR appls
+
+alias ko-sylpheed='ko sylpheed'
+alias gnome-terminal--disable-factory='gnome-terminal --disable-factory'
+alias ko-gnome-terminal--disable-factory='ko gnome-terminal--disable-factory'
+
+
+function sdis() {
+    export DISPLAY=$1:0
+}
+
+function rails_production() {
+    export RAILS_ENV=production
+    PS1="-PRODUCTION- \w\$ "
+}
+
+###########
+### ruby1.9
+# function ruby19() {
+#     export PATH=/mnt/archive/usr/ruby-1.9.0/bin:${PATH}
+#     PS1="-ruby1.9- \w\$ "
+# }
+
+function rubysvn() {
+    export PATH=/mnt/archive/usr/ruby-svn$1/bin:${PATH}
+    PS1="-ruby svn $1- \w\$ "
+}
