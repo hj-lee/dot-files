@@ -80,7 +80,9 @@ fi
 ### rugygem-0.9.4 instll
 ### ruby setup.rb all --prefix=/mnt/archive/usr/rubygems --rbdir=/mnt/archive/usr/rubygems/lib/site_ruby/1.8 --sodir=/mnt/archive/usr/rubygems/lib/site_ruby/1.8/x86_64-linux
 
-export PATH=/home/hjlee/usr/git/bin:${PATH}:/var/lib/gems/1.8/bin:/home/hjlee/bin:/home/hjlee/usr/bin:/home/hjlee/usr/jruby/bin:.
+export PATH=~hjlee/usr/eclipse:~hjlee/usr/git/bin:${PATH}:/var/lib/gems/1.8/bin:~hjlee/bin:~hjlee/usr/bin:~hjlee/usr/jruby/bin:~hjlee/usr/android-sdk-linux_x86-1.1_r1/tools:.
+
+#export PATH=${PATH}:~hjlee/usr/android-sdk-linux_x86-1.1_r1/tools
 
 # PREFIX=/mnt/archive/usr/rubygems
 # export GEM_HOME=$PREFIX/lib/ruby/gems/1.8
@@ -106,7 +108,7 @@ export LESSCHARSET=utf-8
 
 export CDDA_DEVICE=/dev/cdrom
 
-# export RUBYLIB=/home/hjlee/work/programming/nurigeul
+# export RUBYLIB=~hjlee/work/programming/nurigeul
 
 
 ####
@@ -116,7 +118,7 @@ export CDDA_DEVICE=/dev/cdrom
 export JAVA_MEM=-Xmx1024m
 export JAVA_STACK=-Xss2048k
 
-CLASSPATH_SOURCE=~/bin/my_classpath.sh
+CLASSPATH_SOURCE=~hjlee/bin/my_classpath.sh
 if [ -f $CLASSPATH_SOURCE ]; then
     . $CLASSPATH_SOURCE
 fi
@@ -127,7 +129,7 @@ fi
 
 export CVS_RSH=ssh
 
-export CVSROOT=/home/hjlee/CVSROOTS
+export CVSROOT=~hjlee/CVSROOTS
 
 
 
