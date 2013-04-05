@@ -80,7 +80,12 @@ fi
 ### rugygem-0.9.4 instll
 ### ruby setup.rb all --prefix=/mnt/archive/usr/rubygems --rbdir=/mnt/archive/usr/rubygems/lib/site_ruby/1.8 --sodir=/mnt/archive/usr/rubygems/lib/site_ruby/1.8/x86_64-linux
 
-export PATH=~hjlee/usr/eclipse:~hjlee/usr/git/bin:${PATH}:/var/lib/gems/1.8/bin:~hjlee/bin:~hjlee/usr/bin:~hjlee/usr/jruby/bin:~hjlee/usr/android-sdk-linux_x86-1.1_r1/tools:.
+export PATH=~hjlee/usr/emacs/bin:~hjlee/usr/scala/bin:~hjlee/usr/google_appengine:~hjlee/usr/eclipse:${PATH}:/var/lib/gems/1.8/bin:~hjlee/bin:~hjlee/usr/bin:~hjlee/usr/jruby/bin:~hjlee/usr/sbcl/bin
+
+export SBCL_HOME=/home/hjlee/usr/sbcl/lib/sbcl
+
+export PATH=~hjlee/usr/hunspell-ko/bin:${PATH}
+export DICPATH=~hjlee/usr/hunspell-dict-ko
 
 #export PATH=${PATH}:~hjlee/usr/android-sdk-linux_x86-1.1_r1/tools
 
@@ -110,20 +115,34 @@ export CDDA_DEVICE=/dev/cdrom
 
 # export RUBYLIB=~hjlee/work/programming/nurigeul
 
+###
+
+export LD_LIBRARY_PATH=~hjlee/usr/lib
+
 
 ####
 #### java
 ####
 
-export JAVA_MEM=-Xmx1024m
-export JAVA_STACK=-Xss2048k
+export JAVA_MEM=-Xmx4096m
+export JAVA_STACK=-Xss1m
 
 CLASSPATH_SOURCE=~hjlee/bin/my_classpath.sh
 if [ -f $CLASSPATH_SOURCE ]; then
     . $CLASSPATH_SOURCE
 fi
 
+###
+### scala
+###
 
+export JAVA_OPTS="-Xmx4096m -Xss1m -Xms256m"
+
+export SCALA_HOME=/home/hjlee/usr/scala
+
+###
+###
+###
 
 # export SP_ENCODING=euc-kr
 
@@ -133,7 +152,7 @@ export CVSROOT=~hjlee/CVSROOTS
 
 
 
-export UNZIP=-Ocp949
+# export UNZIP=-Ocp949
 
 
 # export RAILS_ENV=production
@@ -142,13 +161,16 @@ export UNZIP=-Ocp949
 export SDL_VIDEO_X11_DGAMOUSE=0
 
 
+export PATH=.:${PATH}
+
 alias ls='ls -F'
 alias ll='ls -l'
 
 #alias emacs='LANG=en_US.UTF-8 /usr/bin/emacs-snapshot-x'
 #alias emacs="XMODIFIERS='' /usr/bin/emacs-snapshot-x"
 # alias emacs="XMODIFIERS='' /mnt/archive/usr/emacs22/bin/emacs"
-alias emacs="XMODIFIERS='' /usr/bin/emacs"
+#alias emacs="LANG=en_US.UTF-8 XMODIFIERS='' /usr/bin/emacs"
+alias emacs="LANG=en_US.UTF-8 XMODIFIERS='' /home/hjlee/usr/emacs/bin/emacs"
 alias e=emacs
 alias h=history
 alias rm='rm -i'
@@ -189,14 +211,32 @@ function rails_production() {
     PS1="-PRODUCTION- \w\$ "
 }
 
+# rails autotest with rspec
+
+export AUTOFEATURE=true
+export RSPEC=true
+export CUCUMBER=true
+
+##
+## appengine
+##
+
+export PYTHONPATH=~/usr/google_appengine:~/usr/google_appengine/lib/yaml/lib:~/usr/google_appengine/lib/jinja2:~/usr/google_appengine/lib/webapp2:~/usr/google_appengine/lib/webob_1_1_1
+
+
 ###########
 ### ruby1.9
 function ruby19() {
-    export PATH=/mnt/archive/usr/ruby-1.9.0/bin:${PATH}
+    export PATH=~hjlee/usr/ruby-1.9.0/bin:${PATH}
     PS1="-ruby1.9- \w\$ "
 }
 
+function ruby191() {
+    export PATH=~hjlee/usr/ruby-1.9.1/bin:${PATH}
+    PS1="-ruby1.9.1- \w\$ "
+}
+
 function rubysvn() {
-    export PATH=/mnt/archive/usr/ruby-svn$1/bin:${PATH}
+    export PATH=~hjlee/usr/ruby-svn$1/bin:${PATH}
     PS1="-ruby svn $1- \w\$ "
 }
