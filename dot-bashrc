@@ -80,7 +80,7 @@ fi
 ### rugygem-0.9.4 instll
 ### ruby setup.rb all --prefix=/mnt/archive/usr/rubygems --rbdir=/mnt/archive/usr/rubygems/lib/site_ruby/1.8 --sodir=/mnt/archive/usr/rubygems/lib/site_ruby/1.8/x86_64-linux
 
-export PATH=~hjlee/usr/emacs/bin:~hjlee/usr/scala/bin:~hjlee/usr/google_appengine:~hjlee/usr/eclipse:${PATH}:/var/lib/gems/1.8/bin:~hjlee/bin:~hjlee/usr/bin:~hjlee/usr/jruby/bin:~hjlee/usr/sbcl/bin
+export PATH=~hjlee/usr/emacs/bin:~hjlee/usr/google_appengine:~hjlee/usr/eclipse:${PATH}:/var/lib/gems/1.8/bin:~hjlee/bin:~hjlee/usr/bin:~hjlee/usr/jruby/bin:~hjlee/usr/sbcl/bin
 
 export SBCL_HOME=/home/hjlee/usr/sbcl/lib/sbcl
 
@@ -97,6 +97,10 @@ export DICPATH=~hjlee/usr/hunspell-dict-ko
 
 # export PATH=${PREFIX}/bin:${GEM_HOME}/bin:${PATH}
 
+###
+# ruby 1.9 gems 
+
+export PATH=~hjlee/.gem/ruby/1.9.1/bin:${PATH}
 
 # # export GEM_HOME=/mnt/archive/usr/rubygems/gems
 
@@ -139,6 +143,8 @@ fi
 export JAVA_OPTS="-Xmx4096m -Xss1m -Xms256m"
 
 export SCALA_HOME=/home/hjlee/usr/scala
+
+export PATH=~hjlee/usr/scala/bin:${PATH}
 
 ###
 ###
