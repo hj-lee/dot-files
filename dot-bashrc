@@ -80,7 +80,7 @@ fi
 ### rugygem-0.9.4 instll
 ### ruby setup.rb all --prefix=/mnt/archive/usr/rubygems --rbdir=/mnt/archive/usr/rubygems/lib/site_ruby/1.8 --sodir=/mnt/archive/usr/rubygems/lib/site_ruby/1.8/x86_64-linux
 
-export PATH=~hjlee/usr/emacs/bin:~hjlee/usr/google_appengine:~hjlee/usr/eclipse:${PATH}:/var/lib/gems/1.8/bin:~hjlee/bin:~hjlee/usr/bin:~hjlee/usr/jruby/bin:~hjlee/usr/sbcl/bin
+export PATH=~hjlee/usr/emacs/bin:~hjlee/usr/google_appengine:~hjlee/usr/eclipse:/usr/local/bin:${PATH}:/var/lib/gems/1.8/bin:~hjlee/bin:~hjlee/usr/bin:~hjlee/usr/jruby/bin:~hjlee/usr/sbcl/bin
 
 export SBCL_HOME=/home/hjlee/usr/sbcl/lib/sbcl
 
@@ -100,7 +100,7 @@ export DICPATH=~hjlee/usr/hunspell-dict-ko
 ###
 # ruby 1.9 gems 
 
-export PATH=~hjlee/.gem/ruby/1.9.1/bin:${PATH}
+#export PATH=~hjlee/.gem/ruby/1.9.1/bin:${PATH}
 
 # # export GEM_HOME=/mnt/archive/usr/rubygems/gems
 
@@ -145,6 +145,10 @@ export JAVA_OPTS="-Xmx4096m -Xss1m -Xms256m"
 export SCALA_HOME=/home/hjlee/usr/scala
 
 export PATH=~hjlee/usr/scala/bin:${PATH}
+
+## sbt
+
+export PATH=~hjlee/usr/sbt/bin:${PATH} 
 
 ###
 ###
@@ -199,6 +203,14 @@ alias ko='LANG=ko_KR'
 alias ko.utf8='LANG=ko_KR.UTF-8'
 alias en='LANG=en_US'
 alias en.utf8='LANG=en_US.UTF-8'
+
+###
+#
+# Seneca
+#
+
+alias mat='ssh hlee157@matrix.senecac.on.ca'
+alias zen='ssh int222_151e14@zenit.senecac.on.ca'
 
 ###
 # ko_KR appls
