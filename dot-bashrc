@@ -100,7 +100,7 @@ export DICPATH=~hjlee/usr/hunspell-dict-ko
 ###
 # ruby 1.9 gems 
 
-#export PATH=~hjlee/.gem/ruby/1.9.1/bin:${PATH}
+export PATH=~hjlee/.gem/ruby/1.9.1/bin:${PATH}
 
 # # export GEM_HOME=/mnt/archive/usr/rubygems/gems
 
@@ -111,7 +111,8 @@ export JRUBY_OPTS='-Ku -rubygems'
 #umask 002
 
 #export EDITOR=emacs
-export EDITOR=dtemacs
+# export EDITOR=dtemacs
+export EDITOR=emacsclient
 
 export LESSCHARSET=utf-8
 
@@ -212,6 +213,13 @@ alias en.utf8='LANG=en_US.UTF-8'
 alias mat='ssh hlee157@matrix.senecac.on.ca'
 alias zen='ssh int222_151e14@zenit.senecac.on.ca'
 
+
+###
+# Pi
+
+alias mypi='ssh pi@192.168.0.70'
+
+
 ###
 # ko_KR appls
 
@@ -242,19 +250,9 @@ export CUCUMBER=true
 export PYTHONPATH=~/usr/google_appengine:~/usr/google_appengine/lib/yaml/lib:~/usr/google_appengine/lib/jinja2:~/usr/google_appengine/lib/webapp2:~/usr/google_appengine/lib/webob_1_1_1
 
 
-###########
-### ruby1.9
-function ruby19() {
-    export PATH=~hjlee/usr/ruby-1.9.0/bin:${PATH}
-    PS1="-ruby1.9- \w\$ "
-}
+##
+## Oracle
+##
 
-function ruby191() {
-    export PATH=~hjlee/usr/ruby-1.9.1/bin:${PATH}
-    PS1="-ruby1.9.1- \w\$ "
-}
-
-function rubysvn() {
-    export PATH=~hjlee/usr/ruby-svn$1/bin:${PATH}
-    PS1="-ruby svn $1- \w\$ "
-}
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/usr/oracle/instantclient_12_1
+export PATH=~/usr/oracle/instantclient_12_1:$PATH
