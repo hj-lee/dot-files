@@ -88,7 +88,7 @@ export PATH=~hjlee/usr/hunspell-ko/bin:${PATH}
 export DICPATH=~hjlee/usr/hunspell-dict-ko
 
 
-export PATH=~hjlee/usr/gnucash/bin:${PATH}
+#export PATH=~hjlee/usr/gnucash/bin:${PATH}
 
 
 #export PATH=${PATH}:~hjlee/usr/android-sdk-linux_x86-1.1_r1/tools
@@ -145,6 +145,10 @@ fi
 
 export PATH=~hjlee/usr/idea/bin:${PATH}
 
+### android-studio
+
+export PATH=~hjlee/usr/android-studio/bin:${PATH}
+
 
 ###
 ### scala
@@ -159,6 +163,10 @@ export PATH=~hjlee/usr/scala/bin:${PATH}
 ## sbt
 
 export PATH=~hjlee/usr/sbt/bin:${PATH} 
+
+## activator
+
+export PATH=~hjlee/usr/activator/bin:${PATH}
 
 ###
 ###
@@ -254,10 +262,18 @@ export RSPEC=true
 export CUCUMBER=true
 
 ##
+## python
+##
+
+# pysdl2
+export PYTHONPATH=~/usr/python/lib/python2.7/site-packages:$PYTHONPATH
+
+
+##
 ## appengine
 ##
 
-export PYTHONPATH=~/usr/google_appengine:~/usr/google_appengine/lib/yaml/lib:~/usr/google_appengine/lib/jinja2:~/usr/google_appengine/lib/webapp2:~/usr/google_appengine/lib/webob_1_1_1
+export PYTHONPATH=~/usr/google_appengine:~/usr/google_appengine/lib/yaml/lib:~/usr/google_appengine/lib/jinja2:~/usr/google_appengine/lib/webapp2:~/usr/google_appengine/lib/webob_1_1_1:$PYTHONPATH
 
 
 ##
@@ -266,3 +282,9 @@ export PYTHONPATH=~/usr/google_appengine:~/usr/google_appengine/lib/yaml/lib:~/u
 
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/usr/oracle/instantclient_12_1
 export PATH=~/usr/oracle/instantclient_12_1:$PATH
+
+# The next line updates PATH for the Google Cloud SDK.
+source '/home/hjlee/usr/google-cloud-sdk/path.bash.inc'
+
+# The next line enables shell command completion for gcloud.
+source '/home/hjlee/usr/google-cloud-sdk/completion.bash.inc'
