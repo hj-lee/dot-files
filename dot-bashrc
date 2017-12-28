@@ -102,9 +102,9 @@ export DICPATH=~hjlee/usr/hunspell-dict-ko
 # export PATH=${PREFIX}/bin:${GEM_HOME}/bin:${PATH}
 
 ###
-# ruby 1.9 gems 
+# ruby 2.3 gems 
 
-export PATH=~hjlee/.gem/ruby/1.9.1/bin:${PATH}
+export PATH=~hjlee/.gem/ruby/2.3.0/bin:${PATH}
 
 # # export GEM_HOME=/mnt/archive/usr/rubygems/gems
 
@@ -123,6 +123,11 @@ export LESSCHARSET=utf-8
 export CDDA_DEVICE=/dev/cdrom
 
 # export RUBYLIB=~hjlee/work/programming/nurigeul
+
+
+### global
+
+export GTAGSLABEL=pygments
 
 ###
 
@@ -156,17 +161,35 @@ export PATH=~hjlee/usr/android-studio/bin:${PATH}
 
 export JAVA_OPTS="-Xmx4096m -Xss1m -Xms256m"
 
-export SCALA_HOME=/home/hjlee/usr/scala
+# export SCALA_HOME=/home/hjlee/usr/scala
 
-export PATH=~hjlee/usr/scala/bin:${PATH}
+# export PATH=~hjlee/usr/scala/bin:${PATH}
 
-## sbt
+# ## sbt
 
-export PATH=~hjlee/usr/sbt/bin:${PATH} 
+# export PATH=~hjlee/usr/sbt/bin:${PATH} 
 
 ## activator
 
-export PATH=~hjlee/usr/activator/bin:${PATH}
+# export PATH=~hjlee/usr/activator/bin:${PATH}
+
+###
+### javascript, node, npm
+###
+
+export PATH=~hjlee/usr/node/bin:${PATH}
+
+export PATH=~hjlee/usr/phantomjs/bin:${PATH}
+
+
+
+###
+### react-native
+###
+
+export ANDROID_HOME=~/Android/Sdk
+export PATH=${PATH}:${ANDROID_HOME}/tools
+export PATH=${PATH}:${ANDROID_HOME}/platform-tools
 
 ###
 ###
@@ -213,7 +236,7 @@ alias lsatl='ls -atl | less'
 alias lstla='ls -atl | less'
 alias lssl='ls -Sl | less'
 
-alias dusl='du $* | sort -nr | less'
+alias dusl='du -d1 $* | sort -nr | less'
 
 alias l='zless'
 
@@ -221,6 +244,14 @@ alias ko='LANG=ko_KR'
 alias ko.utf8='LANG=ko_KR.UTF-8'
 alias en='LANG=en_US'
 alias en.utf8='LANG=en_US.UTF-8'
+
+###
+#
+# Krita
+#
+
+export PATH=~hjlee/krita/inst/bin:${PATH}
+
 
 ###
 #
@@ -288,3 +319,10 @@ source '/home/hjlee/usr/google-cloud-sdk/path.bash.inc'
 
 # The next line enables shell command completion for gcloud.
 source '/home/hjlee/usr/google-cloud-sdk/completion.bash.inc'
+
+### Added by the Heroku Toolbelt
+export PATH="/usr/local/heroku/bin:$PATH"
+
+#THIS MUST BE AT THE END OF THE FILE FOR SDKMAN TO WORK!!!
+export SDKMAN_DIR="/home/hjlee/.sdkman"
+[[ -s "/home/hjlee/.sdkman/bin/sdkman-init.sh" ]] && source "/home/hjlee/.sdkman/bin/sdkman-init.sh"
