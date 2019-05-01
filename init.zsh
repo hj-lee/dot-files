@@ -5,6 +5,11 @@ source '/home/hjlee/usr/google-cloud-sdk/path.zsh.inc'
 source '/home/hjlee/usr/google-cloud-sdk/completion.zsh.inc'
 
 
-. /etc/zsh_command_not_found
+# . /etc/zsh_command_not_found
 
+# global aliases
 
+alias -g G='| grep'
+alias -g Gi='| grep -i'
+
+alias -g L='| less'
