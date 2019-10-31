@@ -21,6 +21,10 @@ add-to-path .
 add-to-path-end ~/bin
 add-to-path-end ~/usr/bin
 
+### anki
+
+add-to-path ~/usr/anki/bin
+
 ### hunspell
 
 export PATH=~/usr/hunspell-ko/bin:${PATH}
@@ -116,7 +120,9 @@ add-to-path ~/.cargo/bin
 ## appengine
 ##
 
-export PYTHONPATH=~/usr/google_appengine:~/usr/google_appengine/lib/yaml/lib:~/usr/google_appengine/lib/jinja2:~/usr/google_appengine/lib/webapp2:~/usr/google_appengine/lib/webob_1_1_1:$PYTHONPATH
+# conflict with aws
+
+# export PYTHONPATH=~/usr/google_appengine:~/usr/google_appengine/lib/yaml/lib:~/usr/google_appengine/lib/jinja2:~/usr/google_appengine/lib/webapp2:~/usr/google_appengine/lib/webob_1_1_1:$PYTHONPATH
 
 ##
 ## Oracle
@@ -158,6 +164,8 @@ alias dusl='du $* | sort -nr | less'
 
 alias l='zless -i'
 
+alias lpath='echo "${PATH//:/\n}"'
+
 alias ko='LANG=ko_KR'
 alias ko.utf8='LANG=ko_KR.UTF-8'
 alias en='LANG=en_US'
@@ -171,3 +179,8 @@ alias magit='emacsclient -e "(magit-status \".\")"'
 alias mypi='ssh pi@192.168.0.70'
 
 
+###
+# nvm
+
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
