@@ -152,8 +152,9 @@ alias ll='ls -l'
 #alias emacs='LANG=en_US.UTF-8 /usr/bin/emacs-snapshot-x'
 #alias emacs="XMODIFIERS='' /usr/bin/emacs-snapshot-x"
 # alias emacs="XMODIFIERS='' /mnt/archive/usr/emacs22/bin/emacs"
-alias emacs="LANG=en_US.UTF-8 XMODIFIERS='' /usr/bin/emacs"
+# alias emacs="LANG=en_US.UTF-8 XMODIFIERS='' /usr/bin/emacs"
 # alias emacs="LANG=en_US.UTF-8 XMODIFIERS='' /home/hjlee/usr/emacs/bin/emacs"
+alias emacs="LANG=en_US.UTF-8 XMODIFIERS='' emacs"
 alias e=emacs
 alias h=history
 alias rm='rm -i'
