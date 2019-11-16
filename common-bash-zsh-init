@@ -135,6 +135,9 @@ add-to-path ~/usr/oracle/instantclient_12_1
 add-to-path /usr/local/heroku/bin
 
 
+add-to-path ~/.yarn/bin
+
+
 #########
 ## alias
 
@@ -182,5 +185,6 @@ alias mypi='ssh pi@192.168.0.70'
 ###
 # nvm
 
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+# export NVM_DIR="$HOME/.nvm"
+# [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+
