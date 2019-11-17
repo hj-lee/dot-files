@@ -143,6 +143,12 @@ add-to-path /usr/local/heroku/bin
 
 add-to-path ~/.yarn/bin
 
+##
+## Nautilus open in terminal Desktop hack
+##
+
+[[ $PWD = "/home/hjlee/Desktop" ]] && cd
+
 
 #########
 ## alias
