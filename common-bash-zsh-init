@@ -189,6 +189,7 @@ alias en.utf8='LANG=en_US.UTF-8'
 
 alias magit='emacsclient -e "(magit-status \".\")"'
 
+alias de='DOOM_EMACS=1 \emacs'
 ###
 # Pi
 
