@@ -14,10 +14,11 @@ function add-to-path-end() {
     fi
 }
 
-###
-# place /snap/bin before other paths
 
-export PATH="/snap/bin":${PATH}
+# ###
+# # place /snap/bin before other paths
+
+# export PATH="/snap/bin":${PATH}
 
 ###
 
