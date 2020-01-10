@@ -27,6 +27,10 @@ add-to-path .
 add-to-path-end ~/bin
 add-to-path-end ~/usr/bin
 
+### webstorm
+
+add-to-path ~/usr/WebStorm/bin
+
 ### anki
 
 add-to-path ~/usr/anki/bin
