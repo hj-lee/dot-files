@@ -184,8 +184,6 @@ alias dusl='du $* | sort -nr | less'
 
 alias l='zless -i'
 
-alias lpath='echo "${PATH//:/\n}"'
-
 alias ko='LANG=ko_KR'
 alias ko.utf8='LANG=ko_KR.UTF-8'
 alias en='LANG=en_US'

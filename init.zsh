@@ -1,3 +1,7 @@
+
+alias lpath='echo "${PATH//:/\n}"'
+
+
 # The next line updates PATH for the Google Cloud SDK.
 source '/home/hjlee/usr/google-cloud-sdk/path.zsh.inc'
 
