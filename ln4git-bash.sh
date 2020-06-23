@@ -1,6 +1,7 @@
 
 function ln() {
-    while [[ $1 =~ -.* ]]; do
+    # echo $*
+    while [[ $1 =~ ^-.* ]]; do
 	  shift
     done
     # echo $*
