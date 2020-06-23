@@ -2,7 +2,7 @@
 # export PATH=$HOME/bin:/usr/local/bin:$PATH
 
 # Path to your oh-my-zsh installation.
-export ZSH="/home/hjlee/.oh-my-zsh"
+export ZSH="${HOME}/.oh-my-zsh"
 
 # Set name of the theme to load --- if set to "random", it will
 # load a random theme each time oh-my-zsh is loaded, in which case,
@@ -104,11 +104,9 @@ source $ZSH/oh-my-zsh.sh
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 
-source ~/dot-files/common-bash-zsh-init
-source ~/dot-files/init.zsh
+echo ${ZSH_SOURCE[0]}
 
+DIR=$(dirname "${(%):-%N}")
 
-#THIS MUST BE AT THE END OF THE FILE FOR SDKMAN TO WORK!!!
-export SDKMAN_DIR="/home/hjlee/.sdkman"
-[[ -s "/home/hjlee/.sdkman/bin/sdkman-init.sh" ]] && source "/home/hjlee/.sdkman/bin/sdkman-init.sh"
-
+source $DIR/common-bash-zsh-init
+source $DIR/init.zsh
