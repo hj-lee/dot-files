@@ -70,6 +70,7 @@ plugins=(
     gradle
     sudo
     web-search
+    nvm
     zsh-syntax-highlighting
     zsh-autosuggestions
     z
