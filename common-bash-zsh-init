@@ -31,19 +31,7 @@ add-to-path-end ~/usr/bin
 
 add-to-path ~/usr/WebStorm/bin
 
-### anki
-
-add-to-path ~/usr/anki/bin
-
-### hunspell
-
-export PATH=~/usr/hunspell-ko/bin:${PATH}
-export DICPATH=~/usr/hunspell-dict-ko
-
-
 ### ruby
-
-# add-to-path ~/.gem/ruby/2.3.0/bin
 
 export RUBYOPT='-Ku'
 
@@ -87,13 +75,6 @@ export JAVA_STACK=-Xss1m
 
 export JAVA_OPTS="-Xmx4096m -Xss1m -Xms256m"
 
-###
-### javascript, node, npm
-###
-
-add-to-path ~/usr/node/bin
-
-add-to-path ~/usr/phantomjs/bin
 
 ###
 ### react-native
@@ -126,24 +107,10 @@ add-to-path ~/.local/bin
 
 add-to-path ~/.cargo/bin
 
-##
-## appengine
-##
-
-# conflict with aws
-
-# export PYTHONPATH=~/usr/google_appengine:~/usr/google_appengine/lib/yaml/lib:~/usr/google_appengine/lib/jinja2:~/usr/google_appengine/lib/webapp2:~/usr/google_appengine/lib/webob_1_1_1:$PYTHONPATH
 
 ##
-## Oracle
+## yarn
 ##
-
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/usr/oracle/instantclient_12_1
-add-to-path ~/usr/oracle/instantclient_12_1
-
-### Added by the Heroku Toolbelt
-add-to-path /usr/local/heroku/bin
-
 
 add-to-path ~/.yarn/bin
 
@@ -191,10 +158,15 @@ alias en.utf8='LANG=en_US.UTF-8'
 
 alias magit='emacsclient -e "(magit-status \".\")"'
 
+##
+## chemacs
+## 
+
 alias de='\emacs --with-profile doom'
 alias den='\emacs --with-profile doom-noevil'
-###
-# Pi
+
+##
+## Pi
 
 alias mypi='ssh pi@192.168.0.70'
 
