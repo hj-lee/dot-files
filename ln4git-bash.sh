@@ -1,9 +1,21 @@
 
 function ln() {
-    # echo $*
     while [[ $1 =~ ^-.* ]]; do
 	  shift
     done
-    # echo $*
-    cmd /c"mklink /J $(cygpath -w $2) $(cygpath -w $1)"
+
+    src=$1
+    dest=$2
+
+    if   [[ ! -e $src ]]; then
+	echo "$src not found"
+	return 1
+    elif [[ ! -d $src ]]; then
+	echo "$src is not directory"
+	return 1
+    fi
+
+    [[ -d $dest ]] && dest=$dest/$(basename $src)
+
+    MSYS_NO_PATHCONV=1 cmd /c"mklink /J $(cygpath -w $dest) $(cygpath -w $src)"
 }
