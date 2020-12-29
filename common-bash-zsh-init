@@ -165,8 +165,8 @@ alias magit='emacsclient -e "(magit-status \".\")"'
 alias de='\emacs --with-profile doom'
 alias den='\emacs --with-profile doom-noevil'
 
-##
-## Pi
+local_init=$DIR/local-common-init
 
-alias mypi='ssh pi@192.168.0.70'
-
+if [[ -e $local_init ]]; then
+   source $local_init
+fi
