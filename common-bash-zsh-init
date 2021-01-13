@@ -121,6 +121,13 @@ add-to-path ~/.yarn/bin
 [[ $PWD = "/home/hjlee/Desktop" ]] && cd
 
 
+##
+## CMake
+##
+
+export CMAKE_GENERATOR="Ninja"
+
+
 #########
 ## alias
 
@@ -164,6 +171,11 @@ alias magit='emacsclient -e "(magit-status \".\")"'
 
 alias de='\emacs --with-profile doom'
 alias den='\emacs --with-profile doom-noevil'
+
+
+##
+## local-common-init
+##
 
 local_init=$DIR/local-common-init
 
