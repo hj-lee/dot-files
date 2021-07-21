@@ -115,6 +115,13 @@ add-to-path ~/.cargo/bin
 add-to-path ~/.yarn/bin
 
 ##
+## swift
+##
+
+add-to-path-end ~/usr/swift/bin
+
+
+##
 ## Nautilus open in terminal Desktop hack
 ##
 
