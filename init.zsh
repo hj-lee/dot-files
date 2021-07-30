@@ -16,3 +16,12 @@ alias -g L='| less'
 # PROMPT=$'%D %*\n%{%f%b%k%}$(build_prompt) '
 # PROMPT=$'%F{cyan}%D %*\n%{%f%b%k%}$(build_prompt) '
 RPROMPT='%F{green}%D %*'
+
+##
+## Mac OS X
+##
+
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    source $DIR/darwin-zsh-init.zsh
+fi
+
