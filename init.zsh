@@ -25,3 +25,13 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     source $DIR/darwin-zsh-init.zsh
 fi
 
+##
+## Emacs tramp
+if [[ "$TERM" == "dumb" ]]; then
+    unsetopt zle
+    unsetopt prompt_cr
+    unsetopt prompt_subst
+    unfunction precmd
+    unfunction preexec
+    PS1='$ '
+fi
