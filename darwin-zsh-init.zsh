@@ -1,2 +1,16 @@
 
 alias emacs=/Applications/Emacs.app/Contents/MacOS/Emacs
+
+add-to-path /Applications/Julia-1.6.app/Contents/Resources/julia/bin
+add-to-path /opt/homebrew/opt/ruby/bin
+add-to-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/
+add-to-path /Applications/Xcode.app/Contents/Developer/usr/bin
+
+# export SYSTEM_FRAMEWORK_SEARCH_PATHS=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library
+
+export ANDROID_HOME=~/Library/Android/sdk
+export ANDROID_SDK_ROOT=~/Library/Android/sdk
+add-to-path ${ANDROID_SDK_ROOT}/tools
+add-to-path ${ANDROID_SDK_ROOT}/platform-tools
+
+add-to-path /Applications/Android\ Studio.app/Contents/MacOS/
