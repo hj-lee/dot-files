@@ -1,13 +1,13 @@
 # -*- Shell-script -*-
 
-function add-to-path() {
+function add-to-path {
     if [[ ! ( $PATH == "$@":* || $PATH == *:"$@":* || $PATH == *:"$@" ) ]]; then
 	# echo add "$@" to path
 	export PATH="$@":${PATH}
     fi
 }
 
-function add-to-path-end() {
+function add-to-path-end {
     if [[ ! ( $PATH == "$@":* || $PATH == *:"$@":* || $PATH == *:"$@" ) ]]; then
 	# echo add "$@" to path
 	export PATH=${PATH}:"$@"

@@ -1,5 +1,5 @@
 
-function ln() {
+function ln {
     while [[ $1 =~ ^-.* ]]; do
 	  shift
     done

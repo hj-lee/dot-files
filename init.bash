@@ -1,4 +1,4 @@
 
-function lpath() {
+function lpath {
     echo "${PATH//:/$'\n'}"
 }
