@@ -35,3 +35,13 @@ if [[ "$TERM" == "dumb" ]]; then
     unfunction preexec
     PS1='$ '
 fi
+
+##
+## local-zsh-init
+##
+
+local_init=$DIR/local-zsh-init
+
+if [[ -e $local_init ]]; then
+   source $local_init
+fi
