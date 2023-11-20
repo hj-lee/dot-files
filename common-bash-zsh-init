@@ -81,8 +81,8 @@ export JAVA_OPTS="-Xmx4096m -Xss1m -Xms256m"
 ###
 
 export ANDROID_HOME=~/Android/Sdk
-add-to-path ${ANDROID_HOME}/tools
-add-to-path ${ANDROID_HOME}/platform-tools
+add-to-path-end ${ANDROID_HOME}/tools
+add-to-path-end ${ANDROID_HOME}/platform-tools
 
 ## kscript
 
