@@ -27,10 +27,6 @@ add-to-path .
 add-to-path-end ~/bin
 add-to-path-end ~/usr/bin
 
-### webstorm
-
-add-to-path ~/usr/WebStorm/bin
-
 ### ruby
 
 export RUBYOPT='-Ku'
@@ -40,12 +36,14 @@ export RUBYOPT='-Ku'
 export EDITOR=emacsclient
 
 export LESSCHARSET=utf-8
-# export LESS='-i -S'
 
-export CDDA_DEVICE=/dev/cdrom
+### color
+
+export DIFFCOLORS=always
+
+###
 
 export LD_LIBRARY_PATH=~/usr/lib
-
 
 ### idea
 
