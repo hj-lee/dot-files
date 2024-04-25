@@ -81,7 +81,7 @@ plugins=(
     web-search
     pip
     python
-    pyenv
+    mise
     nvm
     brew
     zsh-syntax-highlighting
