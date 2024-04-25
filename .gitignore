@@ -1,3 +1,4 @@
 /local-common-init.sh
 *.zwc
 /local-zsh-init.zsh
+/.idea/
