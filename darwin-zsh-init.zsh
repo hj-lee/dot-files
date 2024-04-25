@@ -9,7 +9,7 @@ add-to-path /Applications/Xcode.app/Contents/Developer/usr/bin
 
 export ANDROID_HOME=~/Library/Android/sdk
 export ANDROID_SDK_ROOT=~/Library/Android/sdk
-add-to-path ${ANDROID_SDK_ROOT}/tools
-add-to-path ${ANDROID_SDK_ROOT}/platform-tools
+add-to-path-end ${ANDROID_SDK_ROOT}/tools
+add-to-path-end ${ANDROID_SDK_ROOT}/platform-tools
 
 add-to-path /Applications/Android\ Studio.app/Contents/MacOS/
