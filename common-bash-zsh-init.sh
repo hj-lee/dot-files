@@ -1,17 +1,17 @@
 # -*- Shell-script -*-
 
 function add-to-path {
-    if [[ ! ( $PATH == "$@":* || $PATH == *:"$@":* || $PATH == *:"$@" ) ]]; then
-	# echo add "$@" to path
-	export PATH="$@":${PATH}
-    fi
+  if [[ ! ( $PATH == "$1":* || $PATH == *:"$1":* || $PATH == *:"$1" ) && -d "$1" ]]; then
+    # echo add "$1" to path
+    export PATH="$1":${PATH}
+  fi
 }
 
 function add-to-path-end {
-    if [[ ! ( $PATH == "$@":* || $PATH == *:"$@":* || $PATH == *:"$@" ) ]]; then
-	# echo add "$@" to path
-	export PATH=${PATH}:"$@"
-    fi
+  if [[ ! ( $PATH == "$1":* || $PATH == *:"$1":* || $PATH == *:"$1" ) && -d "$1" ]]; then
+    # echo add "$1" to path
+    export PATH=${PATH}:"$1"
+  fi
 }
 
 
