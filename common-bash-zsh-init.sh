@@ -177,12 +177,11 @@ alias magit='emacsclient -e "(magit-status \".\")"'
 alias de='\emacs --with-profile doom'
 alias den='\emacs --with-profile doom-noevil'
 
-
 ##
-## local-common-init
+## local-common-init.sh
 ##
 
-local_init=$DIR/local-common-init
+local_init=$DIR/local-common-init.sh
 
 if [[ -e $local_init ]]; then
    source $local_init

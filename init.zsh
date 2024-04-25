@@ -37,10 +37,10 @@ if [[ "$TERM" == "dumb" ]]; then
 fi
 
 ##
-## local-zsh-init
+## local-zsh-init.zsh
 ##
 
-local_init=$DIR/local-zsh-init
+local_init=$DIR/local-zsh-init.zsh
 
 if [[ -e $local_init ]]; then
    source $local_init

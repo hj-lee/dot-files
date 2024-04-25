@@ -121,5 +121,5 @@ echo ${ZSH_SOURCE[0]}
 
 DIR=$(dirname "${(%):-%N}")
 
-source $DIR/common-bash-zsh-init
+source $DIR/common-bash-zsh-init.sh
 source $DIR/init.zsh

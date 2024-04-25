@@ -1,2 +1,3 @@
-/local-common-init
+/local-common-init.sh
 *.zwc
+/local-zsh-init.zsh
