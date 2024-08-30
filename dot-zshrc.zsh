@@ -115,8 +115,6 @@ source $ZSH/oh-my-zsh.sh
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 
-echo ${ZSH_SOURCE[0]}
-
 DIR=$(dirname "${(%):-%N}")
 
 source $DIR/common-bash-zsh-init.sh
