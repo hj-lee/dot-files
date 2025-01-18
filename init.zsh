@@ -25,6 +25,15 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     source $DIR/darwin-zsh-init.zsh
 fi
 
+
+##
+## mise
+
+if type mise > /dev/null; then
+    eval "$(mise activate zsh)"
+fi
+
+
 ##
 ## Emacs tramp
 if [[ "$TERM" == "dumb" ]]; then
