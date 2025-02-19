@@ -1,5 +1,6 @@
 
 alias emacs=/Applications/Emacs.app/Contents/MacOS/Emacs
+add-to-path-end /Applications/Emacs.app//Contents/MacOS/bin
 
 add-to-path /opt/homebrew/opt/ruby/bin
 add-to-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/
