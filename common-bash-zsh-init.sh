@@ -14,12 +14,6 @@ function add-to-path-end {
   fi
 }
 
-
-# ###
-# # place /snap/bin before other paths
-
-# export PATH="/snap/bin":${PATH}
-
 ###
 
 add-to-path .
@@ -41,10 +35,6 @@ export LESSCHARSET=utf-8
 
 export DIFFCOLORS=always
 
-###
-
-export LD_LIBRARY_PATH=~/usr/lib
-
 ### idea
 
 add-to-path ~/usr/idea/bin
@@ -54,83 +44,32 @@ add-to-path ~/usr/idea/bin
 add-to-path ~/usr/android-studio/bin
 
 
-### global
+# ### global
 
-export GTAGSLABEL=pygments
+# export GTAGSLABEL=pygments
 
 
-###
 ### java
-###
 
-export JAVA_MEM=-Xmx4096m
-export JAVA_STACK=-Xss1m
-
-
-###
-### scala
-###
-
-export JAVA_OPTS="-Xmx4096m -Xss1m -Xms256m"
+# export JAVA_MEM=-Xmx4096m
+# export JAVA_STACK=-Xss1m
 
 
-###
-### react-native
-###
+### rust
 
-export ANDROID_HOME=~/Android/Sdk
-add-to-path-end ${ANDROID_HOME}/tools
-add-to-path-end ${ANDROID_HOME}/platform-tools
-
-## kscript
-
-add-to-path ~/other-src/kscript/build/libs
-
-##
-## julia
-##
-
-add-to-path ~/usr/julia/bin
-
-
-##
-## python
-##
-
-add-to-path ~/.local/bin
-
-##
-## rust
-##
 
 add-to-path ~/.cargo/bin
 
 
-##
-## yarn
-##
 
-add-to-path ~/.yarn/bin
-
-##
-## swift
-##
-
-add-to-path-end ~/usr/swift/bin
-
-
-##
 ## Nautilus open in terminal Desktop hack
-##
 
 [[ $PWD = "/home/hjlee/Desktop" ]] && cd
 
 
-##
-## CMake
-##
+# ## CMake
 
-export CMAKE_GENERATOR="Ninja"
+# export CMAKE_GENERATOR="Ninja"
 
 
 #########
@@ -170,16 +109,12 @@ alias en.utf8='LANG=en_US.UTF-8'
 
 alias magit='emacsclient -e "(magit-status \".\")"'
 
-##
-## chemacs
-## 
+# ## chemacs
 
-alias de='\emacs --with-profile doom'
-alias den='\emacs --with-profile doom-noevil'
+# alias de='\emacs --with-profile doom'
+# alias den='\emacs --with-profile doom-noevil'
 
-##
 ## local-common-init.sh
-##
 
 local_init=$DIR/local-common-init.sh
 
