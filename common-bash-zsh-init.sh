@@ -1,5 +1,7 @@
 # -*- Shell-script -*-
 
+export LC_ALL=en_US.UTF-8
+
 function add-to-path {
   if [[ ! ( $PATH == "$1":* || $PATH == *:"$1":* || $PATH == *:"$1" ) && -d "$1" ]]; then
     # echo add "$1" to path
