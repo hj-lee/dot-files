@@ -33,7 +33,7 @@ export LESSCHARSET=utf-8
 
 ### color
 
-export DIFFCOLORS=always
+# export DIFFCOLORS=always
 
 ### idea
 
