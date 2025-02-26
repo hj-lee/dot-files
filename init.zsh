@@ -1,6 +1,11 @@
 
 alias lpath='echo "${PATH//:/\n}"'
 
+function remove-path {
+    PATH=$(lpath | grep -v "^$1\$" | paste -s -d ":" -)
+}
+
+
 unsetopt AUTO_CD
 
 # . /etc/zsh_command_not_found
