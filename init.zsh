@@ -35,9 +35,12 @@ fi
 ## mise
 
 if type mise > /dev/null; then
+    # brew mise
     eval "$(mise activate zsh)"
+elif [[ -f ~/.local/bin/mise ]]; then
+    # self install mise
+    eval "$(~/.local/bin/mise activate zsh)"
 fi
-
 
 ##
 ## Emacs tramp
