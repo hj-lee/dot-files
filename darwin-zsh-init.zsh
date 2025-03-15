@@ -2,8 +2,9 @@
 alias emacs=/Applications/Emacs.app/Contents/MacOS/Emacs
 add-to-path-end /Applications/Emacs.app//Contents/MacOS/bin
 
-add-to-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/
-add-to-path /Applications/Xcode.app/Contents/Developer/usr/bin
+## Don't add below Xcode.app bin paths
+# add-to-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+# add-to-path /Applications/Xcode.app/Contents/Developer/usr/bin
 
 # export SYSTEM_FRAMEWORK_SEARCH_PATHS=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library
 
