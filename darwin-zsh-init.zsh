@@ -16,9 +16,15 @@ add-to-path-end ${ANDROID_SDK_ROOT}/platform-tools
 add-to-path-end ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin
 add-to-path-end ${ANDROID_SDK_ROOT}/emulator
 
-add-to-path /Applications/Android\ Studio.app/Contents/MacOS/
+#add-to-path /Applications/Android\ Studio.app/Contents/MacOS/
 
-# homebrew ruby 
-add-to-path /opt/homebrew/opt/ruby/bin
+
+# prefer mise ruby over homebrew ruby 
+
+# add-to-path /opt/homebrew/opt/ruby/bin
 # export LDFLAGS="-L/opt/homebrew/opt/ruby/lib"
 # export CPPFLAGS="-I/opt/homebrew/opt/ruby/include"
+
+
+# uv etc
+add-to-path-end ~/.local/bin
