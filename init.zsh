@@ -16,6 +16,7 @@ alias -g G='| grep'
 alias -g Gi='| grep -i'
 
 alias -g L='| less'
+alias -g W='| wc'
 
 # PROMPT="%{%f%b%k%}$(build_prompt) " 
 # PROMPT=$'%D %*\n%{%f%b%k%}$(build_prompt) '
