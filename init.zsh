@@ -23,6 +23,10 @@ alias -g W='| wc'
 # PROMPT=$'%F{cyan}%D %*\n%{%f%b%k%}$(build_prompt) '
 RPROMPT='%F{green}%D %*'
 
+if [[ -n "$CONTAINER_ID" ]]; then
+    PROMPT='%{%f%b%k%}%S[$CONTAINER_ID]%s$(build_prompt) '
+fi
+
 ##
 ## Mac OS X
 ##
