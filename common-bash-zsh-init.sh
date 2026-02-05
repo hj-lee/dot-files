@@ -16,6 +16,22 @@ function add-to-path-end {
   fi
 }
 
+####
+# ssh with emacsclient port forwarding
+
+## remote site needs below
+#export EMACS_SOCKET_NAME=/tmp/emacs-remote-socket
+#export EMACSCLIENT_TRAMP=/ssh:<user>@<host>: 
+
+
+function ssh-ecf {
+    remote="${1}"
+    server_socket=$(emacsclient -e "(expand-file-name server-name server-socket-dir)" | sed 's/"//g')
+    ssh "$remote" rm -f /tmp/emacs-remote-socket
+    ssh -R "/tmp/emacs-remote-socket:$server_socket" "${@}" 
+}
+
+
 ###
 
 add-to-path-end ~/bin
