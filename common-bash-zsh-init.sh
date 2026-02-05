@@ -18,8 +18,6 @@ function add-to-path-end {
 
 ###
 
-add-to-path .
-
 add-to-path-end ~/bin
 add-to-path-end ~/usr/bin
 
