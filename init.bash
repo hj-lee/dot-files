@@ -1,3 +1,10 @@
+# -*- Shell-script -*-
+#
+# No longer actively maintained: zsh is the shell in daily use, so new
+# setup goes in init.zsh. This is kept working for the occasional bash
+# login, but it lags behind -- e.g. mise is activated only in init.zsh,
+# so anything mise provides (fzf included) is absent here.
+# Shared, shell-agnostic setup belongs in common-bash-zsh-init.sh.
 
 function lpath {
     echo "${PATH//:/$'\n'}"
