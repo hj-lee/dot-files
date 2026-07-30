@@ -72,6 +72,23 @@ if [[ "$TERM" == "dumb" || -n "$INSIDE_EMACS" ]]; then
 fi
 
 ##
+## fzf shell integration (completion + key bindings)
+##
+## Deliberately below the dumb-terminal guard above: this installs ZLE
+## widgets, which corrupt a TRAMP session. Only runs when fzf is actually
+## installed, so the same file stays usable on hosts without it.
+
+if [[ -o interactive ]] && type fzf > /dev/null 2>&1; then
+    if fzf --zsh > /dev/null 2>&1; then
+        # fzf >= 0.48
+        eval "$(fzf --zsh)"
+    elif [[ -f ~/.fzf.zsh ]]; then
+        # git/install-script layout
+        source ~/.fzf.zsh
+    fi
+fi
+
+##
 ## local-zsh-init.zsh
 ##
 
