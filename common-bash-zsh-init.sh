@@ -18,11 +18,16 @@ function add-to-path-end {
 
 ####
 # ssh with emacsclient port forwarding
+#
+# From the laptop:  ssh-ecf <host>            reverse-forwards the laptop's Emacs
+#                                             server socket to the remote host.
+# On the remote:    emacs-remote [ssh|sshx]   routes emacsclient / $EDITOR / magit
+#                                             to the forwarded (laptop) Emacs when
+#                                             its socket is live, else the local one.
+#                   emacs-remote off          restore local-only behaviour.
+# The per-call routing lives in emacsclient-auto.sh (see that file).
 
-## remote site needs below
-#export EMACS_SOCKET_NAME=/tmp/emacs-remote-socket
-#export EMACSCLIENT_TRAMP=/ssh:<user>@<host>: 
-
+export EMACSCLIENT_AUTO="$DIR/emacsclient-auto.sh"
 
 function ssh-ecf {
     local remote="${1}"
@@ -41,6 +46,24 @@ function ssh-ecf {
     command ssh "$remote" rm -f /tmp/emacs-remote-socket
     command ssh -o ExitOnForwardFailure=yes \
                 -R "/tmp/emacs-remote-socket:$server_socket" "${@}"
+}
+
+# Toggle routing of emacsclient / $EDITOR / magit to the forwarded (laptop)
+# Emacs. Default method is ssh; use sshx if TRAMP stalls on the remote prompt.
+#   emacs-remote [ssh|sshx] [user@host]
+#   emacs-remote off
+function emacs-remote {
+    if [[ "$1" == off ]]; then
+        unset EMACSCLIENT_TRAMP_PREFIX
+        unset -f emacsclient 2>/dev/null
+        export EDITOR=emacsclient
+        return
+    fi
+    local method="${1:-ssh}"
+    local target="${2:-${EMACS_REMOTE_TARGET:-$USER@$(hostname -s)}}"
+    export EMACSCLIENT_TRAMP_PREFIX="/${method}:${target}:"
+    export EDITOR="$EMACSCLIENT_AUTO"
+    emacsclient() { command "$EMACSCLIENT_AUTO" "$@"; }
 }
 
 
@@ -135,7 +158,7 @@ alias ko.utf8='LANG=ko_KR.UTF-8'
 alias en='LANG=en_US'
 alias en.utf8='LANG=en_US.UTF-8'
 
-alias magit='emacsclient -e "(magit-status \".\")"'
+alias magit='emacsclient -e "(magit-status \"${EMACSCLIENT_TRAMP_PREFIX}$PWD\")"'
 
 # ## chemacs
 

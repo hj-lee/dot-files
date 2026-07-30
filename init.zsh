@@ -47,15 +47,28 @@ elif [[ -f ~/.local/bin/mise ]]; then
     eval "$(~/.local/bin/mise activate zsh)"
 fi
 
-##
-## Emacs tramp
-if [[ "$TERM" == "dumb" ]]; then
-    unsetopt zle
-    unsetopt prompt_cr
-    unsetopt prompt_subst
-    unfunction precmd
-    unfunction preexec
+ ##
+ ## Emacs tramp / dumb-terminal guard.
+ ## Must strip precmd_functions/preexec_functions arrays -- Kiro CLI (sourced from
+ ## .zprofile, i.e. BEFORE this file) registers fig_precmd/fig_preexec there and they
+ ## emit OSC 697 escapes that TRAMP's prompt matcher can never match.
+if [[ "$TERM" == "dumb" || -n "$INSIDE_EMACS" ]]; then
+    unsetopt zle 2>/dev/null
+    unsetopt prompt_cr 2>/dev/null
+    unsetopt prompt_subst 2>/dev/null
+
+    precmd_functions=()
+    preexec_functions=()
+    unfunction precmd 2>/dev/null
+    unfunction preexec 2>/dev/null
+
+    unset RPS1 RPROMPT
     PS1='$ '
+    PROMPT='$ '
+
+    # Disable line-editor plugins that corrupt the stream.
+    unset ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE
+    return
 fi
 
 ##
