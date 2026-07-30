@@ -48,6 +48,79 @@ function ssh-ecf {
                 -R "/tmp/emacs-remote-socket:$server_socket" "${@}"
 }
 
+####
+# tmux front-end for ssh-ecf: one session per remote host.
+#
+#   tssh-ecf <host>  attach to that host's ssh-ecf session, reconnecting if
+#                    the connection dropped; create the session if absent.
+#   tssh-ecf         list the existing ssh-ecf-* sessions and their state.
+#
+# Session names are ssh-ecf-<host> built from the alias as typed, so `cld`
+# and `clouddesk` get separate sessions even though they are the same
+# machine. Names must be sanitised: tmux accepts `.` and `:` in a session
+# name but then cannot target it (they are the session:window.pane
+# delimiters), leaving a session that can only be killed via its $id.
+#
+# Three tmux details drive the rest of this shape:
+#   - ssh-ecf is a shell function, so tmux (which execs its argv directly)
+#     cannot run it; it must be wrapped in an interactive login shell.
+#   - `tmux new -A` IGNORES its shell-command when the session already
+#     exists, so reconnecting has to be done explicitly via send-keys.
+#   - `exec zsh -li` keeps the pane alive after ssh exits; without it the
+#     session is destroyed on disconnect and there is nothing to revive.
+function tssh-ecf {
+    if [[ $# -eq 0 ]]; then
+        local found=0 name state
+        while IFS=' ' read -r name state; do
+            [[ -z $name ]] && continue
+            found=1
+            if [[ $state == *ssh* ]]; then
+                printf '  %-28s (%s, live)\n' "$name" "$state"
+            else
+                printf '  %-28s (%s, dropped)\n' "$name" "$state"
+            fi
+        done < <(tmux list-sessions -F '#{session_name} #{pane_current_command}' 2>/dev/null \
+                 | grep '^ssh-ecf-')
+        if (( ! found )); then
+            echo "tssh-ecf: no ssh-ecf sessions; run 'tssh-ecf <host>'" >&2
+            return 1
+        fi
+        return 0
+    fi
+
+    local host="${1}"
+    # Strip any user@ prefix, keep IPs whole, otherwise keep the first DNS
+    # label, then replace anything tmux cannot target.
+    local tag="${host#*@}"
+    if [[ $tag == <->.<->.<->.<-> ]]; then
+        tag="${tag//./_}"
+    else
+        tag="${tag%%.*}"
+    fi
+    tag="${tag//[^a-zA-Z0-9_-]/_}"
+
+    local session="ssh-ecf-${tag}"
+    local cmd="ssh-ecf $host; exec zsh -li"
+
+    if tmux has-session -t "=$session" 2>/dev/null; then
+        # Revive only if ssh is gone; pane_current_command is `ssh` while live.
+        if [[ "$(tmux list-panes -t "=$session" -F '#{pane_current_command}' 2>/dev/null)" != *ssh* ]]; then
+            # send-keys takes a PANE target; bare "=name" is parsed as a pane
+            # spec and fails to resolve, so anchor with a trailing colon.
+            tmux send-keys -t "=$session:" "ssh-ecf $host" C-m
+        fi
+    else
+        tmux new-session -d -s "$session" zsh -lic "$cmd" || return 1
+    fi
+
+    # switch-client when already inside tmux; attach otherwise.
+    if [[ -n $TMUX ]]; then
+        tmux switch-client -t "=$session"
+    else
+        tmux attach-session -t "=$session"
+    fi
+}
+
 # Toggle routing of emacsclient / $EDITOR / magit to the forwarded (laptop)
 # Emacs. Default method is ssh; use sshx if TRAMP stalls on the remote prompt.
 #   emacs-remote [ssh|sshx] [user@host]
