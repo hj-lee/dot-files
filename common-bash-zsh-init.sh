@@ -242,8 +242,13 @@ alias ko.utf8='LANG=ko_KR.UTF-8'
 alias en='LANG=en_US'
 alias en.utf8='LANG=en_US.UTF-8'
 
-# Open magit for each given directory (default "."), each in its own new
-# frame, as that frame's only window.
+# Open magit for each given directory (default ".").
+#
+#   magit [-n|--no-frame] [DIR...]
+#
+# By default each DIR opens in its own new frame, as that frame's only window.
+# With -n/--no-frame, just open the magit buffer in the current frame (the old
+# behaviour) and skip all frame handling.
 #
 # Notes on the elisp, each learned the hard way:
 #  - `non-essential' must be nil. emacsclient -e evaluates with it non-nil,
@@ -256,7 +261,18 @@ alias en.utf8='LANG=en_US.UTF-8'
 #  - make-frame fails in a headless daemon ("Unknown terminal type"), so fall
 #    back to the selected frame there instead of aborting.
 function magit {
-    local arg d
+    local frame=1
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -n|--no-frame) frame=; shift ;;
+            --)            shift; break ;;
+            -*)
+                echo "magit: unknown option: $1" >&2
+                return 2 ;;
+            *) break ;;
+        esac
+    done
+    local arg d lisp
     for arg in "${@:-.}"; do
         # Absolute path: default-directory is interpreted in the Emacs that
         # evaluates this, which may be on the other side of an ssh-ecf forward.
@@ -264,15 +280,23 @@ function magit {
             echo "magit: no such directory: $arg" >&2
             return 1
         }
-        emacsclient -e "(let* ((non-essential nil)
-                               (frame (or (condition-case nil (make-frame) (error nil))
-                                          (selected-frame))))
-                          (select-frame-set-input-focus frame)
-                          (with-selected-frame frame
-                            (let ((default-directory \"${EMACSCLIENT_TRAMP_PREFIX}${d}/\"))
-                              (magit-status-setup-buffer default-directory)
-                              (delete-other-windows (frame-selected-window frame))))
-                          t)" > /dev/null || return 1
+        if [[ -n $frame ]]; then
+            lisp="(let* ((non-essential nil)
+                         (frame (or (condition-case nil (make-frame) (error nil))
+                                    (selected-frame))))
+                    (select-frame-set-input-focus frame)
+                    (with-selected-frame frame
+                      (let ((default-directory \"${EMACSCLIENT_TRAMP_PREFIX}${d}/\"))
+                        (magit-status-setup-buffer default-directory)
+                        (delete-other-windows (frame-selected-window frame))))
+                    t)"
+        else
+            lisp="(let ((non-essential nil)
+                        (default-directory \"${EMACSCLIENT_TRAMP_PREFIX}${d}/\"))
+                    (magit-status-setup-buffer default-directory)
+                    t)"
+        fi
+        emacsclient -e "$lisp" > /dev/null || return 1
     done
 }
 
