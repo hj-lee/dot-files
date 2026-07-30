@@ -25,10 +25,22 @@ function add-to-path-end {
 
 
 function ssh-ecf {
-    remote="${1}"
-    server_socket=$(emacsclient -e "(expand-file-name server-name server-socket-dir)" | sed 's/"//g')
-    ssh "$remote" rm -f /tmp/emacs-remote-socket
-    ssh -R "/tmp/emacs-remote-socket:$server_socket" "${@}" 
+    local remote="${1}"
+    local server_socket
+    server_socket=$(command emacsclient -e '(expand-file-name server-name server-socket-dir)' \
+                    2>/dev/null | sed 's/"//g')
+    if [[ -z $server_socket || ! -S $server_socket ]]; then
+        echo "ssh-ecf: no local Emacs server socket found; start Emacs first" >&2
+        return 1
+    fi
+    # Remove any stale forwarded socket first: sshd here does not honour
+    # StreamLocalBindUnlink, so after an ungraceful disconnect the leftover
+    # file makes the -R bind (and thus the whole connection, given
+    # ExitOnForwardFailure) fail. The bind happens at session setup, before any
+    # remote command runs, so this must be a separate prior connection.
+    command ssh "$remote" rm -f /tmp/emacs-remote-socket
+    command ssh -o ExitOnForwardFailure=yes \
+                -R "/tmp/emacs-remote-socket:$server_socket" "${@}"
 }
 
 
