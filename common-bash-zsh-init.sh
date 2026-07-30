@@ -66,6 +66,90 @@ function emacs-remote {
     emacsclient() { command "$EMACSCLIENT_AUTO" "$@"; }
 }
 
+####
+# picker plumbing
+#
+# Pickers themselves live where their domain does -- e.g. bws-pick (brazil
+# workspace packages) is in LapinShell's scripts/brazil.zsh.
+
+# Run a picker, then hand what it selected to a command.
+# One line of picker output becomes one argument.
+#
+#   with-picker [-a|-e] PICKER [PICKER_ARG...] -- COMMAND [ARG...]
+#   with-picker [-a|-e] PICKER COMMAND [ARG...]
+#
+#   -a, --all    pass every selection to a single invocation (default)
+#                  -> COMMAND [ARG...] SEL1 SEL2 ...
+#   -e, --each   invoke COMMAND once per selection
+#                  -> COMMAND [ARG...] SEL1 ; COMMAND [ARG...] SEL2 ; ...
+#
+# Both the picker and the command can take their own arguments, so `--' marks
+# where the picker's end and the command begins:
+#   with-picker bws-pick -1 -- magit        # picker gets -1
+#   with-picker bws-pick magit              # no picker args; -- optional
+# Without a `--', everything after PICKER is the command.
+#
+# Use --each for commands that only accept one argument. With --each, a failing
+# invocation stops the run and its status is returned.
+# Aborting the picker (or selecting nothing) is a no-op, not an error.
+function with-picker {
+    local mode=all
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -a|--all)  mode=all;  shift ;;
+            -e|--each) mode=each; shift ;;
+            --)        shift; break ;;
+            -*)
+                echo "with-picker: unknown option: $1" >&2
+                return 2 ;;
+            *) break ;;
+        esac
+    done
+    local picker="$1"
+    shift 2>/dev/null
+    # Split remaining args at `--': before it belongs to the picker, after it
+    # is the command. With no `--', all of it is the command.
+    local -a picker_args
+    picker_args=()
+    local seen_sep=
+    while [[ $# -gt 0 ]]; do
+        if [[ "$1" == -- ]]; then
+            seen_sep=1
+            shift
+            break
+        fi
+        picker_args+=("$1")
+        shift
+    done
+    if [[ -z $seen_sep ]]; then
+        # No separator: what we collected was really the command.
+        set -- "${picker_args[@]}"
+        picker_args=()
+    fi
+    [[ -n $picker && $# -gt 0 ]] || {
+        echo "with-picker: usage: with-picker [-a|-e] PICKER [PICKER_ARG...] -- COMMAND [ARG...]" >&2
+        return 2
+    }
+    local sel
+    sel=$("$picker" "${picker_args[@]}") || return 1
+    [[ -n $sel ]] || return 0
+    local -a items
+    items=()
+    local line
+    while IFS= read -r line; do
+        [[ -n $line ]] && items+=("$line")
+    done <<< "$sel"
+    [[ ${#items[@]} -gt 0 ]] || return 0
+    if [[ $mode == each ]]; then
+        local item rc
+        for item in "${items[@]}"; do
+            "$@" "$item" || { rc=$?; return $rc; }
+        done
+        return 0
+    fi
+    "$@" "${items[@]}"
+}
+
 
 ###
 
