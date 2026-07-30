@@ -70,7 +70,7 @@ function emacs-remote {
 ###
 
 add-to-path-end ~/bin
-add-to-path-end ~/usr/bin
+add-to-path ~/usr/bin
 
 ### ruby
 
