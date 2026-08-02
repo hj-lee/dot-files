@@ -378,6 +378,19 @@ function magit {
 # alias de='\emacs --with-profile doom'
 # alias den='\emacs --with-profile doom-noevil'
 
+####
+# Auto-enable emacs-remote routing on interactive ssh sessions.
+#
+# ssh-ecf (run from the laptop) forwards the laptop's Emacs socket to the
+# remote, but routing only takes effect once emacs-remote is called. Do that
+# here so it happens automatically instead of as a manual step after login.
+# Safe even when the socket wasn't forwarded (e.g. a plain, non-ecf ssh):
+# emacsclient-auto.sh falls back to the local Emacs whenever the forwarded
+# socket isn't live.
+if [[ -n $SSH_CONNECTION && $- == *i* ]]; then
+    emacs-remote
+fi
+
 ## local-common-init.sh
 
 local_init=$DIR/local-common-init.sh
