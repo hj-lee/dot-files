@@ -226,7 +226,7 @@ function with-picker {
 
 ###
 
-add-to-path-end ~/bin
+add-to-path ~/bin
 add-to-path ~/usr/bin
 
 ### ruby
