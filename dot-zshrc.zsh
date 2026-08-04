@@ -4,6 +4,35 @@
 # Path to your oh-my-zsh installation.
 export ZSH="${HOME}/.oh-my-zsh"
 
+DIR=$(dirname "${(%):-%N}")
+
+# PATH/env that must precede oh-my-zsh -- mise above all, since plugins probe
+# for their command at load time. See pre-omz-init.zsh.
+source $DIR/pre-omz-init.zsh
+
+##
+## Emacs tramp / dumb-terminal guard.
+##
+## Return before oh-my-zsh rather than undoing it afterwards: loading it would
+## install a themed prompt, ZLE widgets and a dozen precmd/preexec hooks, and
+## TRAMP's prompt matcher can never match the escapes those emit. Kiro CLI's
+## fig_precmd/fig_preexec (registered from .zprofile, i.e. before this file)
+## are the same problem, hence the explicit strip.
+##
+## PATH is already set by pre-omz-init.zsh above, which is what TRAMP needs.
+## This returns from dot-zshrc.zsh only -- ~/.zshrc continues, so its brazil
+## completion and PATH additions still run.
+if [[ "$TERM" == "dumb" || -n "$INSIDE_EMACS" ]]; then
+    precmd_functions=()
+    preexec_functions=()
+
+    unset RPS1 RPROMPT
+    PS1='$ '
+    PROMPT='$ '
+
+    return
+fi
+
 # Set name of the theme to load --- if set to "random", it will
 # load a random theme each time oh-my-zsh is loaded, in which case,
 # to know which specific one was loaded, run: echo $RANDOM_THEME
@@ -116,8 +145,6 @@ source $ZSH/oh-my-zsh.sh
 # Example aliases
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
-
-DIR=$(dirname "${(%):-%N}")
 
 source $DIR/common-bash-zsh-init.sh
 source $DIR/init.zsh

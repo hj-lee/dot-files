@@ -36,50 +36,16 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 fi
 
 
-##
-## mise
-
-if type mise > /dev/null; then
-    # brew mise
-    eval "$(mise activate zsh)"
-elif [[ -f ~/.local/bin/mise ]]; then
-    # self install mise
-    eval "$(~/.local/bin/mise activate zsh)"
-fi
+## mise and the PATH basics are set from dot-zshrc.zsh, before oh-my-zsh --
+## see pre-omz-init.zsh. The dumb-terminal guard lives there too, and returns
+## before oh-my-zsh loads, so nothing below here runs in such a shell.
 
 ##
 ## ssht / sshts
 ##
-## zsh-only, so it lives here rather than in common-bash-zsh-init.sh. Above
-## the dumb-terminal guard below: these are plain function definitions with
-## no ZLE widgets, so they are safe -- and useful -- inside a TRAMP shell.
+## zsh-only, so it lives here rather than in common-bash-zsh-init.sh.
 
 source $DIR/ssh-tmux.zsh
-
-
- ##
- ## Emacs tramp / dumb-terminal guard.
- ## Must strip precmd_functions/preexec_functions arrays -- Kiro CLI (sourced from
- ## .zprofile, i.e. BEFORE this file) registers fig_precmd/fig_preexec there and they
- ## emit OSC 697 escapes that TRAMP's prompt matcher can never match.
-if [[ "$TERM" == "dumb" || -n "$INSIDE_EMACS" ]]; then
-    unsetopt zle 2>/dev/null
-    unsetopt prompt_cr 2>/dev/null
-    unsetopt prompt_subst 2>/dev/null
-
-    precmd_functions=()
-    preexec_functions=()
-    unfunction precmd 2>/dev/null
-    unfunction preexec 2>/dev/null
-
-    unset RPS1 RPROMPT
-    PS1='$ '
-    PROMPT='$ '
-
-    # Disable line-editor plugins that corrupt the stream.
-    unset ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE
-    return
-fi
 
 ##
 ## local-zsh-init.zsh
