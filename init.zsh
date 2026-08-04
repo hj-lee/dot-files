@@ -47,6 +47,16 @@ elif [[ -f ~/.local/bin/mise ]]; then
     eval "$(~/.local/bin/mise activate zsh)"
 fi
 
+##
+## ssht / sshts
+##
+## zsh-only, so it lives here rather than in common-bash-zsh-init.sh. Above
+## the dumb-terminal guard below: these are plain function definitions with
+## no ZLE widgets, so they are safe -- and useful -- inside a TRAMP shell.
+
+source $DIR/ssh-tmux.zsh
+
+
  ##
  ## Emacs tramp / dumb-terminal guard.
  ## Must strip precmd_functions/preexec_functions arrays -- Kiro CLI (sourced from
