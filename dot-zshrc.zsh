@@ -82,9 +82,11 @@ plugins=(
     mise
     nvm
     brew
+    fzf
+    zsh-interactive-cd
+    z
     zsh-syntax-highlighting
     zsh-autosuggestions
-    z
 )
 
 source $ZSH/oh-my-zsh.sh
