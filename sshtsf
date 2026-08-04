@@ -1,0 +1,853 @@
+#!/usr/bin/env python3
+"""sshtsf -- pick an ssh+tmux session by name, alias, or menu.
+
+A front-end for the `sshts` shell function (ssh-tmux.zsh): it remembers the
+host, session name, remote folder and command in ~/.config/sshtsf/config.toml
+so that a two-word invocation replaces a hand-written alias per session.
+
+    sshtsf                 pick a host, then a session
+    sshtsf cld             pick a session on cld
+    sshtsf cld zc          connect to session zc on cld
+    sshtsf cldzc           the same, via a host+session alias
+    sshtsf cld -n [NAME]   register a new session, then connect
+
+Selections use fzf when it is on PATH and fall back to a numbered menu.
+
+Config layout (all fields but the host key are optional):
+
+    default_host = "cld"
+
+    [last]
+    host = "cld"
+    session = "zc"
+
+    [hosts.cld]
+    target = "cld"          # ssh destination; defaults to the host key
+    alias = "c"
+
+    [hosts.cld.sessions.zc]
+    alias = "cldzc"         # host+session alias, usable as a single word
+    folder = "workplace/zatanna/src/FlexZatannaCDK"
+    command = "kiro-cli"
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import shlex
+import shutil
+import subprocess
+import sys
+import tempfile
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - python < 3.11
+    sys.exit(
+        "sshtsf: needs python 3.11+ for tomllib (found %s).\n"
+        "        mise provides one: mise use -g python@latest"
+        % ".".join(str(n) for n in sys.version_info[:3])
+    )
+
+CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+CONFIG_DIR = os.path.join(CONFIG_HOME, "sshtsf")
+CONFIG_PATH = os.path.join(CONFIG_DIR, "config.toml")
+
+NEW_HOST = "+ new host"
+NEW_SESSION = "+ new session"
+
+
+# --------------------------------------------------------------------------
+# tiny TOML writer
+#
+# tomllib reads but does not write, and tomli_w is not installed. The schema
+# here is small and fully known, so emit it directly rather than take on a
+# dependency. Comments in a hand-edited config are lost on rewrite; that is
+# the one cost of this approach.
+# --------------------------------------------------------------------------
+
+BARE_KEY_OK = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
+
+
+def toml_key(key: str) -> str:
+    if key and all(c in BARE_KEY_OK for c in key):
+        return key
+    return toml_str(key)
+
+
+def toml_str(value: str) -> str:
+    out = value.replace("\\", "\\\\").replace('"', '\\"')
+    out = out.replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r")
+    return '"%s"' % out
+
+
+def dump_config(cfg: dict) -> str:
+    lines: list[str] = [
+        "# sshtsf config -- see `sshtsf --help`.",
+        "# Rewritten by sshtsf; comments outside this header are not preserved.",
+        "",
+    ]
+
+    if cfg.get("default_host"):
+        lines.append("default_host = %s" % toml_str(cfg["default_host"]))
+        lines.append("")
+
+    last = cfg.get("last") or {}
+    if last.get("host"):
+        lines.append("[last]")
+        lines.append("host = %s" % toml_str(last["host"]))
+        if last.get("session"):
+            lines.append("session = %s" % toml_str(last["session"]))
+        lines.append("")
+
+    for host, hcfg in sorted((cfg.get("hosts") or {}).items()):
+        lines.append("[hosts.%s]" % toml_key(host))
+        for field in ("target", "alias"):
+            if hcfg.get(field):
+                lines.append("%s = %s" % (field, toml_str(hcfg[field])))
+        lines.append("")
+
+        for sess, scfg in sorted((hcfg.get("sessions") or {}).items()):
+            lines.append("[hosts.%s.sessions.%s]" % (toml_key(host), toml_key(sess)))
+            for field in ("alias", "folder", "command"):
+                if scfg.get(field):
+                    lines.append("%s = %s" % (field, toml_str(scfg[field])))
+            lines.append("")
+
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
+def load_config() -> dict:
+    if not os.path.exists(CONFIG_PATH):
+        return {"hosts": {}}
+    try:
+        with open(CONFIG_PATH, "rb") as fh:
+            cfg = tomllib.load(fh)
+    except tomllib.TOMLDecodeError as exc:
+        sys.exit("sshtsf: %s is not valid TOML: %s" % (CONFIG_PATH, exc))
+    cfg.setdefault("hosts", {})
+    return cfg
+
+
+def save_config(cfg: dict) -> None:
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    # Write via a temp file in the same dir, then rename: a crash or a full
+    # disk leaves the previous config intact rather than a truncated one.
+    fd, tmp = tempfile.mkstemp(dir=CONFIG_DIR, prefix=".config.toml.")
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(dump_config(cfg))
+        os.replace(tmp, CONFIG_PATH)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+
+# --------------------------------------------------------------------------
+# selection helpers
+# --------------------------------------------------------------------------
+
+
+def have_fzf() -> bool:
+    return shutil.which("fzf") is not None
+
+
+def pick(items: list[str], prompt: str, header: str = "",
+         free_text: bool = False, query: str = "") -> str | None:
+    """Choose one of items. Returns None if the user aborted.
+
+    free_text allows a value that is not in the list -- right for a remote
+    folder, wrong for a host or session, where anything off-list is a typo and
+    would only fail a lookup later. query pre-fills fzf's search box.
+    """
+    if not items:
+        return None
+    if have_fzf() and sys.stdin.isatty():
+        cmd = ["fzf", "--prompt", prompt + " ", "--height", "60%", "--reverse"]
+        if header:
+            cmd += ["--header", header]
+        if query:
+            cmd += ["--query", query]
+        if free_text:
+            # print-query puts the typed text on line 1 and any match after it,
+            # so a value with no match still comes back.
+            cmd += ["--print-query"]
+        proc = subprocess.run(cmd, input="\n".join(items), text=True,
+                              stdout=subprocess.PIPE)
+        lines = [ln for ln in proc.stdout.splitlines() if ln.strip()]
+        if free_text:
+            # Prefer a real selection; fall back to the query when nothing
+            # matched. Exit 130 is abort; exit 1 with a query is "no match".
+            if proc.returncode == 130:
+                return None
+            return (lines[-1] if lines else None)
+        if proc.returncode != 0:
+            return None
+        return lines[-1] if lines else None
+    return pick_numbered(items, prompt, header, free_text)
+
+
+MENU_LIMIT = 40
+
+
+def pick_numbered(items: list[str], prompt: str, header: str = "",
+                  free_text: bool = False) -> str | None:
+    """Numbered fallback for when fzf is absent."""
+    if header:
+        print(header, file=sys.stderr)
+    shown = items[:MENU_LIMIT]
+    for i, item in enumerate(shown, 1):
+        print("  %2d) %s" % (i, item), file=sys.stderr)
+    if len(items) > len(shown):
+        note = "type a value to use it" if free_text else "install fzf to filter"
+        print("  ... %d more (%s)" % (len(items) - len(shown), note),
+              file=sys.stderr)
+
+    hint = "1-%d, a value, or q" % len(shown) if free_text \
+        else "1-%d, or q" % len(shown)
+    while True:
+        try:
+            reply = input("%s [%s]: " % (prompt, hint)).strip()
+        except (EOFError, KeyboardInterrupt):
+            print(file=sys.stderr)
+            return None
+        if reply in ("q", "Q", ""):
+            return None
+        if reply.isdigit() and 1 <= int(reply) <= len(shown):
+            return shown[int(reply) - 1]
+        if reply in items:
+            return reply
+        if free_text:
+            return reply
+        print("  not a choice: %s" % reply, file=sys.stderr)
+
+
+def ask(prompt: str, default: str = "") -> str:
+    suffix = " [%s]" % default if default else ""
+    try:
+        reply = input("%s%s: " % (prompt, suffix)).strip()
+    except (EOFError, KeyboardInterrupt):
+        print(file=sys.stderr)
+        raise SystemExit(130)
+    return reply or default
+
+
+# --------------------------------------------------------------------------
+# config lookup
+# --------------------------------------------------------------------------
+
+
+def host_names(cfg: dict) -> list[str]:
+    return sorted(cfg.get("hosts", {}))
+
+
+def resolve_host(cfg: dict, token: str) -> str | None:
+    """Host key for a token that may be the key itself or a host alias."""
+    hosts = cfg.get("hosts", {})
+    if token in hosts:
+        return token
+    for name, hcfg in hosts.items():
+        if hcfg.get("alias") == token:
+            return name
+    return None
+
+
+def resolve_session(cfg: dict, host: str, token: str) -> str | None:
+    sessions = cfg["hosts"].get(host, {}).get("sessions", {})
+    if token in sessions:
+        return token
+    for name, scfg in sessions.items():
+        if scfg.get("alias") == token:
+            return name
+    return None
+
+
+def resolve_pair_alias(cfg: dict, token: str) -> tuple[str, str] | None:
+    """(host, session) for a single-word host+session alias."""
+    for host, hcfg in cfg.get("hosts", {}).items():
+        for sess, scfg in (hcfg.get("sessions") or {}).items():
+            if scfg.get("alias") == token:
+                return host, sess
+    return None
+
+
+def ssh_target(cfg: dict, host: str) -> str:
+    return cfg["hosts"].get(host, {}).get("target") or host
+
+
+def describe_session(host: str, name: str, scfg: dict) -> str:
+    bits = [name]
+    if scfg.get("alias"):
+        bits.append("(%s)" % scfg["alias"])
+    if scfg.get("folder"):
+        bits.append("~/%s" % scfg["folder"])
+    if scfg.get("command"):
+        bits.append("-> %s" % scfg["command"])
+    return "  ".join(bits)
+
+
+# --------------------------------------------------------------------------
+# remote interaction
+# --------------------------------------------------------------------------
+
+
+# Depth of the folder listing. 4 reaches workplace/<ws>/src/<Package>, which
+# is what a folder usually points at; fuzzy matching then narrows it.
+FOLDER_DEPTH = 4
+
+# Directory names pruned from the listing. These are the ones that explode the
+# count -- a workspace's build output and dependency trees -- not paths anyone
+# selects as a working directory. Dotdirs are pruned separately.
+PRUNE_DIRS = ("build", "node_modules", "target", "env", "cdk.out",
+              "__pycache__", "dist", ".git")
+
+
+def remote_dirs(target: str, depth: int = FOLDER_DEPTH) -> list[str]:
+    """Directories under the remote $HOME, relative, for folder selection.
+
+    A flat recursive list so fuzzy matching can jump straight to a package:
+    typing "za/src/lambda" narrows to workplace/zatanna/src/FlexZatannaLambda.
+    Heavy trees (build output, node_modules, ...) are pruned, which is what
+    keeps a workspace listing in the hundreds rather than thousands.
+    """
+    prunes = " -o ".join("-name %s" % shlex.quote(d) for d in PRUNE_DIRS)
+    # The prune arm matches dotdirs and PRUNE_DIRS at any level; the print arm
+    # emits every other directory. sed strips the leading "./".
+    script = (
+        "cd ~ && find . -mindepth 1 -maxdepth %d "
+        "\\( -name '.*' -o %s \\) -prune "
+        "-o -type d -print 2>/dev/null | sed 's|^\\./||' | sort"
+        % (depth, prunes)
+    )
+    try:
+        proc = subprocess.run(["ssh", target, script], text=True,
+                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                              timeout=60)
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return []
+    if proc.returncode != 0:
+        return []
+    return [line for line in proc.stdout.splitlines() if line.strip()]
+
+
+def show_folder(folder: str) -> None:
+    print("  folder: %s" % ("~/" + folder if folder else "~ (none)"),
+          file=sys.stderr)
+
+
+def prompt_folder(target: str, current: str = "", label: str = "") -> str | None:
+    """Ask for a folder: type one, or press Enter to fuzzy-pick from a listing.
+
+    Returns the folder relative to ~, "" for none, or None if aborted. When
+    browsing an update, the current folder pre-fills fzf's query.
+    """
+    if current:
+        print("  current folder: ~/%s" % current, file=sys.stderr)
+    typed = ask("  folder relative to ~%s (blank to browse, - for none)"
+                % (" for %s" % label if label else ""))
+    if typed == "-":
+        return ""
+    if typed:
+        return typed.strip().rstrip("/")
+
+    print("  listing %s ..." % target, file=sys.stderr)
+    dirs = remote_dirs(target)
+    if not dirs:
+        print("  (could not list %s; type a path if you want one)" % target,
+              file=sys.stderr)
+        typed = ask("  folder relative to ~ (blank for none)")
+        return typed.strip().rstrip("/")
+
+    chosen = pick(dirs, "folder>", "remote folder (abort for none)",
+                  free_text=True, query=current)
+    if chosen is None:
+        return None
+    return chosen.strip().rstrip("/")
+
+
+def live_sessions(target: str) -> list[str]:
+    fmt = "#{session_name}\t#{session_windows}w\t#{?session_attached,attached,detached}"
+    proc = subprocess.run(
+        ["ssh", target, "tmux", "list-sessions", "-F", shlex.quote(fmt)],
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if proc.returncode != 0:
+        return []
+    return [line for line in proc.stdout.splitlines() if line.strip()]
+
+
+def connect(cfg: dict, host: str, session: str, dry_run: bool = False) -> int:
+    scfg = cfg["hosts"][host].get("sessions", {}).get(session, {})
+    target = ssh_target(cfg, host)
+
+    remote = ["tmux", "new-session", "-A"]
+    if scfg.get("folder"):
+        remote += ["-c", scfg["folder"]]
+    remote += ["-s", session]
+    if scfg.get("command"):
+        # A configured command is a command line, not a bare argv[0]: split it
+        # the way a shell would so `emacs -nw .` works as written.
+        remote += shlex.split(scfg["command"])
+
+    # Quote for the remote shell: ssh joins its command words with spaces and
+    # the far side re-parses them, so an unquoted path with a space would
+    # arrive as two arguments. Mirrors ${(q-)@} in ssh-tmux.zsh.
+    argv = ["ssh", target, "-t"] + [shlex.quote(word) for word in remote]
+
+    if dry_run:
+        print(" ".join(argv))
+        return 0
+
+    remember(cfg, host, session)
+    print("sshtsf: %s -> %s" % (target, session), file=sys.stderr)
+    try:
+        os.execvp("ssh", argv)
+    except OSError as exc:
+        sys.exit("sshtsf: cannot exec ssh: %s" % exc)
+
+
+def remember(cfg: dict, host: str, session: str) -> None:
+    cfg["last"] = {"host": host, "session": session}
+    try:
+        save_config(cfg)
+    except OSError as exc:
+        # Not worth aborting a connection over.
+        print("sshtsf: could not save last-used (%s)" % exc, file=sys.stderr)
+
+
+# --------------------------------------------------------------------------
+# routes
+# --------------------------------------------------------------------------
+
+
+def route_add_session(cfg: dict, host: str, name: str = "",
+                      dry_run: bool = False) -> int:
+    """Register a session interactively, then connect to it."""
+    print("sshtsf: new session on %s" % host, file=sys.stderr)
+
+    name = ask("  session name", name)
+    if not name:
+        sys.exit("sshtsf: a session name is required")
+
+    existing = resolve_session(cfg, host, name)
+    if existing:
+        print("sshtsf: %s already exists on %s; connecting" % (existing, host),
+              file=sys.stderr)
+        return connect(cfg, host, existing, dry_run)
+
+    folder = prompt_folder(ssh_target(cfg, host), label=name)
+    if folder is None:
+        print("sshtsf: aborted", file=sys.stderr)
+        return 130
+    show_folder(folder)
+
+    command = ask("  command to run (blank for a shell)")
+
+    # Asked last, and defaulted to the session name, so the whole entry is
+    # visible by the time the shorthand for it is chosen.
+    alias = ask("  alias for %s+%s (blank for none)" % (host, name), name)
+
+    hcfg = cfg["hosts"].setdefault(host, {})
+    sessions = hcfg.setdefault("sessions", {})
+    entry: dict = {}
+    if alias:
+        entry["alias"] = alias
+    if folder:
+        entry["folder"] = folder.rstrip("/")
+    if command:
+        entry["command"] = command
+    sessions[name] = entry
+
+    save_config(cfg)
+    print("sshtsf: saved %s to %s" % (name, CONFIG_PATH), file=sys.stderr)
+    return connect(cfg, host, name, dry_run)
+
+
+def route_add_host(cfg: dict, name: str = "", dry_run: bool = False) -> int:
+    print("sshtsf: new host", file=sys.stderr)
+    name = ask("  host name", name)
+    if not name:
+        sys.exit("sshtsf: a host name is required")
+    if name in cfg["hosts"]:
+        print("sshtsf: %s already registered" % name, file=sys.stderr)
+        return route_pick_session(cfg, name, dry_run)
+
+    target = ask("  ssh destination", name)
+    alias = ask("  alias (blank for none)")
+
+    hcfg: dict = {}
+    if target and target != name:
+        hcfg["target"] = target
+    if alias:
+        hcfg["alias"] = alias
+    hcfg["sessions"] = {}
+    cfg["hosts"][name] = hcfg
+    if not cfg.get("default_host"):
+        cfg["default_host"] = name
+    save_config(cfg)
+    print("sshtsf: saved host %s" % name, file=sys.stderr)
+
+    return route_add_session(cfg, name, dry_run=dry_run)
+
+
+def route_pick_session(cfg: dict, host: str, dry_run: bool = False) -> int:
+    """Show this host's sessions, plus an add-new option."""
+    sessions = cfg["hosts"].get(host, {}).get("sessions", {}) or {}
+    labels = {}
+    for name in sorted(sessions):
+        labels[describe_session(host, name, sessions[name])] = name
+
+    items = list(labels) + [NEW_SESSION]
+    choice = pick(items, "session>", "sessions on %s" % host)
+    if choice is None:
+        return 130
+    if choice == NEW_SESSION:
+        return route_add_session(cfg, host, dry_run=dry_run)
+    return connect(cfg, host, labels[choice], dry_run)
+
+
+def route_pick_host(cfg: dict, dry_run: bool = False) -> int:
+    hosts = host_names(cfg)
+    default = cfg.get("default_host") or (cfg.get("last") or {}).get("host")
+
+    # Put the default (or last-used) first so it is one Enter away.
+    ordered = ([default] if default in hosts else []) + \
+              [h for h in hosts if h != default]
+
+    labels = {}
+    for host in ordered:
+        label = host
+        hcfg = cfg["hosts"][host]
+        extras = []
+        if hcfg.get("alias"):
+            extras.append(hcfg["alias"])
+        if host == default:
+            extras.append("default")
+        if extras:
+            label = "%s  (%s)" % (host, ", ".join(extras))
+        labels[label] = host
+
+    items = list(labels) + [NEW_HOST]
+    choice = pick(items, "host>", "hosts")
+    if choice is None:
+        return 130
+    if choice == NEW_HOST:
+        return route_add_host(cfg, dry_run=dry_run)
+    return route_pick_session(cfg, labels[choice], dry_run)
+
+
+# --------------------------------------------------------------------------
+# config subcommands
+# --------------------------------------------------------------------------
+
+
+def cmd_list(cfg: dict, args) -> int:
+    hosts = cfg.get("hosts", {})
+    if not hosts:
+        print("no hosts registered; run `sshtsf` to add one")
+        return 0
+    default = cfg.get("default_host")
+    last = cfg.get("last") or {}
+    for host in sorted(hosts):
+        hcfg = hosts[host]
+        marks = []
+        if hcfg.get("alias"):
+            marks.append("alias %s" % hcfg["alias"])
+        if hcfg.get("target") and hcfg["target"] != host:
+            marks.append("-> %s" % hcfg["target"])
+        if host == default:
+            marks.append("default")
+        print("%s%s" % (host, "  (%s)" % ", ".join(marks) if marks else ""))
+        sessions = hcfg.get("sessions") or {}
+        if not sessions:
+            print("    (no sessions)")
+        for name in sorted(sessions):
+            here = " *" if (last.get("host") == host
+                            and last.get("session") == name) else ""
+            print("    %s%s" % (describe_session(host, name, sessions[name]), here))
+    return 0
+
+
+def cmd_live(cfg: dict, args) -> int:
+    if args.host:
+        host = resolve_host(cfg, args.host)
+        if not host:
+            sys.exit("sshtsf: unknown host: %s" % args.host)
+        hosts = [host]
+    else:
+        hosts = host_names(cfg)
+        if not hosts:
+            sys.exit("sshtsf: no hosts registered")
+
+    for host in hosts:
+        target = ssh_target(cfg, host)
+        rows = live_sessions(target)
+        print("%s:" % host)
+        if not rows:
+            print("    (no tmux server, or unreachable)")
+            continue
+        known = cfg["hosts"][host].get("sessions", {}) or {}
+        for row in rows:
+            name = row.split("\t")[0]
+            mark = "" if name in known else "   [unregistered]"
+            print("    %s%s" % (row.replace("\t", "  "), mark))
+    return 0
+
+
+def cmd_add(cfg: dict, args) -> int:
+    if args.session is None:
+        return route_add_host(cfg, args.host or "", dry_run=args.dry_run)
+    host = resolve_host(cfg, args.host) if args.host else None
+    if not host:
+        sys.exit("sshtsf: unknown host: %s (add it with `sshtsf add %s`)"
+                 % (args.host, args.host))
+    return route_add_session(cfg, host, args.session or "", dry_run=args.dry_run)
+
+
+def cmd_rm(cfg: dict, args) -> int:
+    host = resolve_host(cfg, args.host)
+    if not host:
+        sys.exit("sshtsf: unknown host: %s" % args.host)
+
+    if args.session:
+        session = resolve_session(cfg, host, args.session)
+        if not session:
+            sys.exit("sshtsf: no session %s on %s" % (args.session, host))
+        del cfg["hosts"][host]["sessions"][session]
+        last = cfg.get("last") or {}
+        if last.get("host") == host and last.get("session") == session:
+            cfg.pop("last", None)  # else `last` points at a session that is gone
+        save_config(cfg)
+        print("sshtsf: removed %s from %s" % (session, host))
+        return 0
+
+    sessions = cfg["hosts"][host].get("sessions") or {}
+    if sessions and not args.force:
+        sys.exit("sshtsf: %s still has %d session(s); pass -f to remove anyway"
+                 % (host, len(sessions)))
+    del cfg["hosts"][host]
+    if cfg.get("default_host") == host:
+        cfg.pop("default_host", None)
+    if (cfg.get("last") or {}).get("host") == host:
+        cfg.pop("last", None)
+    save_config(cfg)
+    print("sshtsf: removed host %s" % host)
+    return 0
+
+
+def cmd_set(cfg: dict, args) -> int:
+    host = resolve_host(cfg, args.host)
+    if not host:
+        sys.exit("sshtsf: unknown host: %s" % args.host)
+
+    if args.session:
+        session = resolve_session(cfg, host, args.session)
+        if not session:
+            sys.exit("sshtsf: no session %s on %s" % (args.session, host))
+        holder = cfg["hosts"][host]["sessions"][session]
+        allowed = ("alias", "folder", "command")
+    else:
+        holder = cfg["hosts"][host]
+        allowed = ("alias", "target")
+
+    if args.field not in allowed:
+        sys.exit("sshtsf: cannot set %s here; try one of: %s"
+                 % (args.field, ", ".join(allowed)))
+
+    value = args.value
+    # `set ... folder` with no value browses from the current one, so updating
+    # a folder is the same interaction as choosing it in the first place.
+    if args.field == "folder" and value is None:
+        chosen = prompt_folder(ssh_target(cfg, host), holder.get("folder", ""),
+                               label=args.session or "")
+        if chosen is None:
+            print("sshtsf: unchanged", file=sys.stderr)
+            return 130
+        value = chosen
+        show_folder(value)
+    elif value is None:
+        sys.exit("sshtsf: set %s needs a value" % args.field)
+
+    if value == "":
+        holder.pop(args.field, None)
+        print("sshtsf: cleared %s" % args.field)
+    else:
+        holder[args.field] = value
+        print("sshtsf: %s = %s" % (args.field, value))
+    save_config(cfg)
+    return 0
+
+
+def cmd_default(cfg: dict, args) -> int:
+    host = resolve_host(cfg, args.host)
+    if not host:
+        sys.exit("sshtsf: unknown host: %s" % args.host)
+    cfg["default_host"] = host
+    save_config(cfg)
+    print("sshtsf: default host = %s" % host)
+    return 0
+
+
+def cmd_path(cfg: dict, args) -> int:
+    print(CONFIG_PATH)
+    return 0
+
+
+# --------------------------------------------------------------------------
+# entry point
+# --------------------------------------------------------------------------
+
+SUBCOMMANDS = {"list", "live", "add", "rm", "set", "default", "config-path"}
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="sshtsf",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Pick an ssh+tmux session by name, alias, or menu.",
+        epilog="""examples:
+  sshtsf                    pick a host, then a session
+  sshtsf cld                pick a session on cld
+  sshtsf cld zc             connect to zc on cld
+  sshtsf cldzc              the same, via a host+session alias
+  sshtsf cld -n             register a new session on cld
+  sshtsf cld -n zl          ...with zl proposed as the name
+
+config:
+  sshtsf list               show hosts and sessions
+  sshtsf live [HOST]        list live remote tmux sessions
+  sshtsf add HOST [NAME]    register a host, or a session on it
+  sshtsf rm HOST [NAME]     remove a session, or a host (-f)
+  sshtsf set HOST [NAME] FIELD [VALUE]
+                            set alias/target, or alias/folder/command;
+                            omit VALUE for folder to browse the remote tree
+  sshtsf default HOST       set the host offered first
+  sshtsf config-path        print the config file path
+""")
+    p.add_argument("args", nargs="*", metavar="ARG")
+    p.add_argument("-n", "--new", nargs="?", const="", default=None,
+                   metavar="NAME", help="register a new session, then connect")
+    p.add_argument("-f", "--force", action="store_true",
+                   help="with rm HOST: remove even if sessions remain")
+    p.add_argument("--dry-run", action="store_true",
+                   help="print the ssh command instead of running it")
+    return p
+
+
+def main(argv: list[str]) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    cfg = load_config()
+    positional = args.args
+
+    # Subcommands, when the first word is one and is not also a known host or
+    # alias -- a host called "list" keeps working.
+    if positional and positional[0] in SUBCOMMANDS:
+        verb, rest = positional[0], positional[1:]
+        shadowed = resolve_host(cfg, verb) or resolve_pair_alias(cfg, verb)
+        if not shadowed:
+            return dispatch(cfg, verb, rest, args)
+
+    if args.new is not None:
+        if not positional:
+            sys.exit("sshtsf: -n needs a host: sshtsf HOST -n [NAME]")
+        host = resolve_host(cfg, positional[0])
+        if not host:
+            sys.exit("sshtsf: unknown host: %s (add it with `sshtsf add %s`)"
+                     % (positional[0], positional[0]))
+        name = args.new or (positional[1] if len(positional) > 1 else "")
+        return route_add_session(cfg, host, name, dry_run=args.dry_run)
+
+    if not positional:
+        if not cfg.get("hosts"):
+            print("sshtsf: no config yet; let's make one", file=sys.stderr)
+            return route_add_host(cfg, dry_run=args.dry_run)
+        return route_pick_host(cfg, dry_run=args.dry_run)
+
+    if len(positional) == 1:
+        token = positional[0]
+        pair = resolve_pair_alias(cfg, token)
+        if pair:
+            return connect(cfg, pair[0], pair[1], args.dry_run)
+        host = resolve_host(cfg, token)
+        if host:
+            return route_pick_session(cfg, host, args.dry_run)
+        sys.exit("sshtsf: unknown host or alias: %s\n"
+                 "        `sshtsf list` to see what is registered, "
+                 "`sshtsf add %s` to add it" % (token, token))
+
+    if len(positional) == 2:
+        host = resolve_host(cfg, positional[0])
+        if not host:
+            sys.exit("sshtsf: unknown host: %s (add it with `sshtsf add %s`)"
+                     % (positional[0], positional[0]))
+        session = resolve_session(cfg, host, positional[1])
+        if session:
+            return connect(cfg, host, session, args.dry_run)
+        # No such session -- fall into the add-new route with the name filled in.
+        print("sshtsf: no session %s on %s" % (positional[1], host),
+              file=sys.stderr)
+        return route_add_session(cfg, host, positional[1], dry_run=args.dry_run)
+
+    sys.exit("sshtsf: too many arguments; see `sshtsf --help`")
+
+
+def dispatch(cfg: dict, verb: str, rest: list[str], args) -> int:
+    class Sub:
+        host = rest[0] if rest else None
+        session = rest[1] if len(rest) > 1 else None
+        force = args.force
+        dry_run = args.dry_run
+
+    if verb == "list":
+        return cmd_list(cfg, Sub)
+    if verb == "config-path":
+        return cmd_path(cfg, Sub)
+    if verb == "live":
+        return cmd_live(cfg, Sub)
+
+    if verb == "add":
+        # `add HOST` registers a host; `add HOST NAME` a session on it.
+        Sub.session = rest[1] if len(rest) > 1 else None
+        if rest and resolve_host(cfg, rest[0]) and len(rest) == 1:
+            Sub.session = ""  # existing host, no name given -> add a session
+        return cmd_add(cfg, Sub)
+
+    if not rest:
+        sys.exit("sshtsf: %s needs a host" % verb)
+
+    if verb == "rm":
+        return cmd_rm(cfg, Sub)
+    if verb == "default":
+        return cmd_default(cfg, Sub)
+    if verb == "set":
+        # set HOST [SESSION] FIELD [VALUE]
+        #
+        # The value is optional only for `folder`, which browses when omitted.
+        # SESSION is told apart from FIELD by name, since both are bare words:
+        # a known session in position 2 means the 4-word form.
+        HOST_FIELDS = ("alias", "target")
+        rest2 = rest[1] if len(rest) > 1 else None
+        if len(rest) == 2:
+            Sub.session, Sub.field, Sub.value = None, rest[1], None
+        elif len(rest) == 3:
+            if rest2 in HOST_FIELDS or not resolve_session(cfg, rest[0] or "", rest2 or ""):
+                Sub.session, Sub.field, Sub.value = None, rest[1], rest[2]
+            else:
+                Sub.session, Sub.field, Sub.value = rest[1], rest[2], None
+        elif len(rest) == 4:
+            Sub.session, Sub.field, Sub.value = rest[1], rest[2], rest[3]
+        else:
+            sys.exit("sshtsf: set HOST [SESSION] FIELD [VALUE]")
+        return cmd_set(cfg, Sub)
+
+    sys.exit("sshtsf: unknown subcommand: %s" % verb)
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except KeyboardInterrupt:
+        print(file=sys.stderr)
+        sys.exit(130)
