@@ -26,16 +26,41 @@ function add-to-path-end {
 #                                             its socket is live, else the local one.
 #                   emacs-remote off          restore local-only behaviour.
 # The per-call routing lives in emacsclient-auto.sh (see that file).
+#
+# The same forward is available on a remote-tmux connection: `ssht --ecf`,
+# `sshts --ecf` (ssh-tmux.zsh) and `sshtsf -e` all go through ecf-prepare.
 
 export EMACSCLIENT_AUTO="$DIR/emacsclient-auto.sh"
 
-function ssh-ecf {
+# Where the forward lands on the remote. The laptop-side counterpart to
+# EMACSCLIENT_FORWARD_SOCKET, which emacsclient-auto.sh reads on the remote to
+# find it; the two default to the same path and must agree.
+: "${ECF_REMOTE_SOCKET:=/tmp/emacs-remote-socket}"
+
+# ecf-prepare <remote> [label]
+#
+# Ready <remote> for an Emacs socket forward, and set ECF_SSH_OPTS to the ssh
+# options that establish it. Returns 1 if no local Emacs server is running;
+# label prefixes that message, so it names whichever front-end was run.
+#
+# The options are handed back in a global array rather than on stdout because
+# they must stay distinct words; `arr=(...)` / `"${arr[@]}"` behave the same in
+# bash and zsh, so both callers can splice them in.
+#
+# Callers: ssh-ecf below, and ssht (ssh-tmux.zsh) under --ecf.
+#
+# One socket per host, and the cleanup below unlinks it: opening a second ecf
+# connection to a host silently kills the first one's forward. Harmless in
+# practice, since every forward points at the same laptop Emacs and the newest
+# one wins.
+function ecf-prepare {
     local remote="${1}"
+    local label="${2:-ecf}"
     local server_socket
     server_socket=$(command emacsclient -e '(expand-file-name server-name server-socket-dir)' \
                     2>/dev/null | sed 's/"//g')
     if [[ -z $server_socket || ! -S $server_socket ]]; then
-        echo "ssh-ecf: no local Emacs server socket found; start Emacs first" >&2
+        echo "$label: no local Emacs server socket found; start Emacs first" >&2
         return 1
     fi
     # Remove any stale forwarded socket first: sshd here does not honour
@@ -43,9 +68,14 @@ function ssh-ecf {
     # file makes the -R bind (and thus the whole connection, given
     # ExitOnForwardFailure) fail. The bind happens at session setup, before any
     # remote command runs, so this must be a separate prior connection.
-    command ssh "$remote" rm -f /tmp/emacs-remote-socket
-    command ssh -o ExitOnForwardFailure=yes \
-                -R "/tmp/emacs-remote-socket:$server_socket" "${@}"
+    command ssh "$remote" rm -f "$ECF_REMOTE_SOCKET"
+    ECF_SSH_OPTS=(-o ExitOnForwardFailure=yes
+                  -R "$ECF_REMOTE_SOCKET:$server_socket")
+}
+
+function ssh-ecf {
+    ecf-prepare "${1}" ssh-ecf || return 1
+    command ssh "${ECF_SSH_OPTS[@]}" "${@}"
 }
 
 ####
