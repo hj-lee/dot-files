@@ -1,17 +1,24 @@
 ####
 # ssh with tmux
 #
-# Runs tmux on the REMOTE host, so the session outlives a dropped
-# connection. (Contrast tssh-ecf in common-bash-zsh-init.sh, which runs tmux
-# LOCALLY for the sole purpose of keeping an ssh-ecf Emacs forward alive.)
+# Two flavours, differing in which end runs tmux:
 #
-# --ecf adds that same forward here, which subsumes what tssh-ecf is for: the
-# remote session survives on its own, and reattaching re-binds the socket.
-# emacsclient-auto.sh resolves the socket per call rather than at login, so a
-# long-lived pane picks the new forward up on its next emacsclient.
+#   ssht / sshts   tmux on the REMOTE host, so the session itself outlives a
+#                  dropped connection. --ecf adds the ssh-ecf Emacs forward.
+#   tssh-ecf       tmux LOCALLY, for the sole purpose of keeping an ssh-ecf
+#                  connection alive; the remote side is a plain login shell.
 #
-# zsh-only -- uses ${(q-)@} -- so this file is sourced from init.zsh rather
-# than common-bash-zsh-init.sh.
+# --ecf largely subsumes what tssh-ecf is for: the remote session survives on
+# its own, and reattaching re-binds the socket. emacsclient-auto.sh resolves
+# that socket per call rather than at login, so a pane that outlived the drop
+# picks the new forward up on its next emacsclient. tssh-ecf remains the way
+# to get the forward without a remote tmux at all.
+#
+# The forward itself is set up by ecf-prepare, which stays in
+# common-bash-zsh-init.sh because ssh-ecf must work under bash too.
+#
+# zsh-only -- ${(q-)@} in ssht, the <-> glob in tssh-ecf -- so this file is
+# sourced from init.zsh rather than common-bash-zsh-init.sh.
 
 # ssht [-h] [--ecf] host [tmux-args...]
 #
@@ -111,4 +118,77 @@ function sshts {
     (( ecf )) && ecfopt=(--ecf)
 
     ssht "${ecfopt[@]}" "$remote" new-session -A "${topts[@]}" -s "$session" "${@}"
+}
+
+####
+# tmux front-end for ssh-ecf: one session per remote host.
+#
+#   tssh-ecf <host>  attach to that host's ssh-ecf session, reconnecting if
+#                    the connection dropped; create the session if absent.
+#   tssh-ecf         list the existing ssh-ecf-* sessions and their state.
+#
+# Session names are ssh-ecf-<host> built from the alias as typed, so `cld`
+# and `clouddesk` get separate sessions even though they are the same
+# machine. Names must be sanitised: tmux accepts `.` and `:` in a session
+# name but then cannot target it (they are the session:window.pane
+# delimiters), leaving a session that can only be killed via its $id.
+#
+# Three tmux details drive the rest of this shape:
+#   - ssh-ecf is a shell function, so tmux (which execs its argv directly)
+#     cannot run it; it must be wrapped in an interactive login shell.
+#   - `tmux new -A` IGNORES its shell-command when the session already
+#     exists, so reconnecting has to be done explicitly via send-keys.
+#   - `exec zsh -li` keeps the pane alive after ssh exits; without it the
+#     session is destroyed on disconnect and there is nothing to revive.
+function tssh-ecf {
+    if [[ $# -eq 0 ]]; then
+        local found=0 name state
+        while IFS=' ' read -r name state; do
+            [[ -z $name ]] && continue
+            found=1
+            if [[ $state == *ssh* ]]; then
+                printf '  %-28s (%s, live)\n' "$name" "$state"
+            else
+                printf '  %-28s (%s, dropped)\n' "$name" "$state"
+            fi
+        done < <(tmux list-sessions -F '#{session_name} #{pane_current_command}' 2>/dev/null \
+                 | grep '^ssh-ecf-')
+        if (( ! found )); then
+            echo "tssh-ecf: no ssh-ecf sessions; run 'tssh-ecf <host>'" >&2
+            return 1
+        fi
+        return 0
+    fi
+
+    local host="${1}"
+    # Strip any user@ prefix, keep IPs whole, otherwise keep the first DNS
+    # label, then replace anything tmux cannot target.
+    local tag="${host#*@}"
+    if [[ $tag == <->.<->.<->.<-> ]]; then
+        tag="${tag//./_}"
+    else
+        tag="${tag%%.*}"
+    fi
+    tag="${tag//[^a-zA-Z0-9_-]/_}"
+
+    local session="ssh-ecf-${tag}"
+    local cmd="ssh-ecf $host; exec zsh -li"
+
+    if tmux has-session -t "=$session" 2>/dev/null; then
+        # Revive only if ssh is gone; pane_current_command is `ssh` while live.
+        if [[ "$(tmux list-panes -t "=$session" -F '#{pane_current_command}' 2>/dev/null)" != *ssh* ]]; then
+            # send-keys takes a PANE target; bare "=name" is parsed as a pane
+            # spec and fails to resolve, so anchor with a trailing colon.
+            tmux send-keys -t "=$session:" "ssh-ecf $host" C-m
+        fi
+    else
+        tmux new-session -d -s "$session" zsh -lic "$cmd" || return 1
+    fi
+
+    # switch-client when already inside tmux; attach otherwise.
+    if [[ -n $TMUX ]]; then
+        tmux switch-client -t "=$session"
+    else
+        tmux attach-session -t "=$session"
+    fi
 }
