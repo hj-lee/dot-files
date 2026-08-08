@@ -48,6 +48,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import textwrap
 
 try:
     import tomllib
@@ -73,6 +74,14 @@ ECF_REMOTE_SOCKET = os.environ.get("ECF_REMOTE_SOCKET") or "/tmp/emacs-remote-so
 # Accepted spellings for the boolean `ecf` field in the config.
 TRUE_WORDS = ("true", "yes", "on", "1")
 FALSE_WORDS = ("false", "no", "off", "0")
+
+# Machines you have actually ssh'd to, offered as candidates when a name is
+# not registered here. known_hosts rather than ~/.ssh/config because it
+# accumulates on its own, with no upkeep.
+KNOWN_HOSTS_PATH = os.path.expanduser("~/.ssh/known_hosts")
+
+# Enough to jog a memory; a long-lived known_hosts runs to hundreds.
+MAX_KNOWN_HOSTS = 24
 
 
 # --------------------------------------------------------------------------
@@ -331,19 +340,86 @@ def describe_host(cfg: dict, host: str) -> str:
     return "%s%s" % (host, "  (%s)" % ", ".join(marks) if marks else "")
 
 
-def host_hint(cfg: dict) -> str:
+def ssh_known_hosts(path: str = KNOWN_HOSTS_PATH) -> list[str]:
+    """Host names from ~/.ssh/known_hosts, deduplicated and sorted.
+
+    A host appears once per key type, hence the dedupe. Hashed entries
+    (HashKnownHosts, `|1|...') cannot be reversed, so they are skipped, as are
+    wildcard and negated patterns -- none of those is a name you could type.
+    One line may list several names comma-separated, and a non-default port
+    appears as [host]:port, unwrapped here to the bare host.
+
+    Marker lines are skipped whole: @cert-authority names a CA and a pattern
+    it signs for rather than a machine, and @revoked marks a key as untrusted,
+    which is the last thing to offer as a suggestion.
+    """
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            lines = fh.readlines()
+    except OSError:
+        return []
+
+    names: set[str] = set()
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split()
+        if not fields or fields[0].startswith("@") or fields[0].startswith("|"):
+            continue
+        for pattern in fields[0].split(","):
+            if not pattern or pattern.startswith("!"):
+                continue
+            if "*" in pattern or "?" in pattern:
+                continue
+            if pattern.startswith("[") and "]" in pattern:
+                pattern = pattern[1:pattern.index("]")]
+            if pattern:
+                names.add(pattern)
+    return sorted(names)
+
+
+def ssh_host_candidates(cfg: dict) -> list[str]:
+    """known_hosts entries not already registered -- i.e. worth offering."""
+    taken = set()
+    for host, hcfg in (cfg.get("hosts") or {}).items():
+        taken.add(host)
+        for field in ("alias", "target"):
+            if hcfg.get(field):
+                taken.add(hcfg[field])
+    return [host for host in ssh_known_hosts() if host not in taken]
+
+
+def host_hint(cfg: dict, ssh_hosts: bool = False) -> str:
     """What is registered, for the messages that reject a host name.
 
-    Named or not, a rejected host is nearly always a typo or a forgotten
-    alias, and the answer is the same list every time -- so print it here
-    rather than send the reader off to `sshtsf list`. Indented to sit under
-    the `sshtsf: ' prefix of the line it follows.
+    A rejected host is nearly always a typo or a forgotten alias, and the
+    answer is the same list every time -- so print it rather than send the
+    reader off to `sshtsf list`. Indented to sit under the `sshtsf: ' prefix
+    of the line it follows.
+
+    ssh_hosts adds the unregistered known_hosts entries. Right where the
+    answer might be "add one of those", wrong for rm/set/default, whose
+    subject can only ever be a host already registered here.
     """
     hosts = host_names(cfg)
-    if not hosts:
-        return "        no hosts registered yet; run `sshtsf` to add one"
-    return "        known hosts:\n" + "\n".join(
-        "          %s" % describe_host(cfg, host) for host in hosts)
+    if hosts:
+        out = "        registered:\n" + "\n".join(
+            "          %s" % describe_host(cfg, host) for host in hosts)
+    else:
+        out = "        nothing registered yet; run `sshtsf` to add a host"
+
+    if ssh_hosts:
+        candidates = ssh_host_candidates(cfg)
+        if candidates:
+            shown = candidates[:MAX_KNOWN_HOSTS]
+            out += "\n        in ~/.ssh/known_hosts:\n" + textwrap.fill(
+                ", ".join(shown), width=76,
+                initial_indent="          ", subsequent_indent="          ")
+            if len(candidates) > len(shown):
+                out += "\n          ... and %d more" % (
+                    len(candidates) - len(shown))
+    return out
 
 
 def describe_session(cfg: dict, host: str, name: str, scfg: dict) -> str:
@@ -606,6 +682,18 @@ def route_add_session(cfg: dict, host: str, name: str = "",
 def route_add_host(cfg: dict, name: str = "", dry_run: bool = False,
                    ecf_override: bool | None = None) -> int:
     print("sshtsf: new host", file=sys.stderr)
+
+    # Nothing typed yet: offer what you have already ssh'd to, so registering a
+    # host is a selection rather than a retype. free_text keeps a name that is
+    # not in known_hosts -- a machine you have not reached yet -- available,
+    # and aborting the picker just falls through to the prompt below.
+    if not name:
+        candidates = ssh_host_candidates(cfg)
+        if candidates:
+            name = pick(candidates, "host>",
+                        "hosts in ~/.ssh/known_hosts (or type a name)",
+                        free_text=True) or ""
+
     name = ask("  host name", name)
     if not name:
         sys.exit("sshtsf: a host name is required")
@@ -742,7 +830,7 @@ def cmd_add(cfg: dict, args) -> int:
     host = resolve_host(cfg, args.host) if args.host else None
     if not host:
         sys.exit("sshtsf: unknown host: %s (add it with `sshtsf add %s`)\n%s"
-                 % (args.host, args.host, host_hint(cfg)))
+                 % (args.host, args.host, host_hint(cfg, ssh_hosts=True)))
     return route_add_session(cfg, host, args.session or "", dry_run=args.dry_run,
                              ecf_override=args.ecf_override)
 
@@ -885,6 +973,10 @@ ecf forwards the laptop's Emacs server socket to the remote, so emacsclient,
 $EDITOR and magit there open in the laptop's Emacs -- what `ssh-ecf` does, on
 a remote-tmux connection. Make it the default with `sshtsf set HOST ecf true`
 or `sshtsf set HOST SESSION ecf true`; -e / -E override for one call.
+
+Hosts you have ssh'd to before are read from ~/.ssh/known_hosts: they are
+offered to pick from when registering a host, and listed alongside the
+registered ones when a name does not resolve.
 """)
     p.add_argument("args", nargs="*", metavar="ARG")
     p.add_argument("-n", "--new", nargs="?", const="", default=None,
@@ -921,11 +1013,12 @@ def main(argv: list[str]) -> int:
     if args.new is not None:
         if not positional:
             sys.exit("sshtsf: -n needs a host: sshtsf HOST -n [NAME]\n%s"
-                     % host_hint(cfg))
+                     % host_hint(cfg, ssh_hosts=True))
         host = resolve_host(cfg, positional[0])
         if not host:
             sys.exit("sshtsf: unknown host: %s (add it with `sshtsf add %s`)\n%s"
-                     % (positional[0], positional[0], host_hint(cfg)))
+                     % (positional[0], positional[0],
+                        host_hint(cfg, ssh_hosts=True)))
         name = args.new or (positional[1] if len(positional) > 1 else "")
         return route_add_session(cfg, host, name, dry_run=args.dry_run,
                                  ecf_override=args.ecf_override)
@@ -946,7 +1039,7 @@ def main(argv: list[str]) -> int:
         host = resolve_host(cfg, token)
         if host:
             return route_pick_session(cfg, host, args.dry_run, args.ecf_override)
-        hint = host_hint(cfg)
+        hint = host_hint(cfg, ssh_hosts=True)
         # With nothing registered the hint already says to run `sshtsf', so
         # the follow-up would only offer a second, competing suggestion.
         if host_names(cfg):
@@ -958,7 +1051,8 @@ def main(argv: list[str]) -> int:
         host = resolve_host(cfg, positional[0])
         if not host:
             sys.exit("sshtsf: unknown host: %s (add it with `sshtsf add %s`)\n%s"
-                     % (positional[0], positional[0], host_hint(cfg)))
+                     % (positional[0], positional[0],
+                        host_hint(cfg, ssh_hosts=True)))
         session = resolve_session(cfg, host, positional[1])
         if session:
             return connect(cfg, host, session, args.dry_run, args.ecf_override)
