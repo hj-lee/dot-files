@@ -26,6 +26,13 @@
 # command words with spaces and the remote shell re-splits them, so without
 # quoting `-n "my name"` would arrive as two arguments.
 #
+# tmux -u, because tmux is the ssh *command* here: the remote login shell runs
+# non-interactively, never reads its .zshrc, and so never sets the LC_ALL that
+# common-bash-zsh-init.sh exports. ssh does not forward the local one either
+# (no SendEnv). The client then decides the terminal is not UTF-8 and prints
+# every non-ASCII cell as `_'. -u asserts UTF-8 regardless of the locale,
+# which also covers a remote that has no en_US.UTF-8 to fall back on.
+#
 # --ecf reverse-forwards the laptop's Emacs socket (see ecf-prepare in
 # common-bash-zsh-init.sh). It has to precede the host, since everything after
 # the host is tmux's.
@@ -53,7 +60,7 @@ function ssht {
         sshopts=("${ECF_SSH_OPTS[@]}")
     fi
 
-    command ssh "${sshopts[@]}" "$remote" -t tmux ${(q-)@}
+    command ssh "${sshopts[@]}" "$remote" -t tmux -u ${(q-)@}
 }
 
 # sshts [-h] [--ecf] host [tmux-opts...] SESSION [command...]

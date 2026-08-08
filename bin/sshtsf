@@ -450,7 +450,11 @@ def connect(cfg: dict, host: str, session: str, dry_run: bool = False,
     target = ssh_target(cfg, host)
     ecf = resolve_ecf(cfg, host, session, ecf_override)
 
-    remote = ["tmux", "new-session", "-A"]
+    # -u for the same reason ssht passes it (ssh-tmux.zsh): tmux is the ssh
+    # command, so the remote shell is non-interactive, never reads .zshrc and
+    # never sets LC_ALL -- and the client then renders every non-ASCII cell as
+    # an underscore. -u asserts UTF-8 without depending on the remote's locales.
+    remote = ["tmux", "-u", "new-session", "-A"]
     if scfg.get("folder"):
         remote += ["-c", scfg["folder"]]
     remote += ["-s", session]
