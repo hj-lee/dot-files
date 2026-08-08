@@ -57,7 +57,14 @@ fi
 ##
 ## Also set in common-bash-zsh-init.sh for bash's benefit; add-to-path is
 ## idempotent, so doing it twice costs nothing.
+##
+## add-to-path prepends, so the last one listed ends up first on PATH: the
+## repo's own bin is listed first and so ranks lowest, letting a script dropped
+## in the untracked ~/bin shadow the committed one. Only holds for directories
+## the shell did not already inherit -- add-to-path leaves those where they
+## are -- so don't lean on it; keep the names distinct instead.
 
+add-to-path $DIR/bin
 add-to-path ~/bin
 add-to-path ~/usr/bin
 

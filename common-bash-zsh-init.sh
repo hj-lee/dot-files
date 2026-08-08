@@ -30,7 +30,7 @@ function add-to-path-end {
 # The tmux front-ends -- tssh-ecf, and ssht/sshts under --ecf -- are zsh-only
 # and live in ssh-tmux.zsh; sshtsf -e is the same forward again, in Python.
 
-export EMACSCLIENT_AUTO="$DIR/emacsclient-auto.sh"
+export EMACSCLIENT_AUTO="$DIR/bin/emacsclient-auto.sh"
 
 # Where the forward lands on the remote. The laptop-side counterpart to
 # EMACSCLIENT_FORWARD_SOCKET, which emacsclient-auto.sh reads on the remote to
@@ -183,7 +183,10 @@ function with-picker {
 
 
 ###
+## Mirrors pre-omz-init.zsh, which does this for zsh before oh-my-zsh; see the
+## note there on why $DIR/bin is listed first and so ranks lowest.
 
+add-to-path $DIR/bin
 add-to-path ~/bin
 add-to-path ~/usr/bin
 
