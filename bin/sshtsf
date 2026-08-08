@@ -316,6 +316,36 @@ def resolve_ecf(cfg: dict, host: str, session: str, override: bool | None) -> bo
     return bool(hcfg.get("ecf"))
 
 
+def describe_host(cfg: dict, host: str) -> str:
+    """`cld  (alias c, -> target, ecf, default)` -- one host, with its marks."""
+    hcfg = cfg["hosts"].get(host, {})
+    marks = []
+    if hcfg.get("alias"):
+        marks.append("alias %s" % hcfg["alias"])
+    if hcfg.get("target") and hcfg["target"] != host:
+        marks.append("-> %s" % hcfg["target"])
+    if hcfg.get("ecf"):
+        marks.append("ecf")
+    if host == cfg.get("default_host"):
+        marks.append("default")
+    return "%s%s" % (host, "  (%s)" % ", ".join(marks) if marks else "")
+
+
+def host_hint(cfg: dict) -> str:
+    """What is registered, for the messages that reject a host name.
+
+    Named or not, a rejected host is nearly always a typo or a forgotten
+    alias, and the answer is the same list every time -- so print it here
+    rather than send the reader off to `sshtsf list`. Indented to sit under
+    the `sshtsf: ' prefix of the line it follows.
+    """
+    hosts = host_names(cfg)
+    if not hosts:
+        return "        no hosts registered yet; run `sshtsf` to add one"
+    return "        known hosts:\n" + "\n".join(
+        "          %s" % describe_host(cfg, host) for host in hosts)
+
+
 def describe_session(cfg: dict, host: str, name: str, scfg: dict) -> str:
     bits = [name]
     if scfg.get("alias"):
@@ -663,20 +693,10 @@ def cmd_list(cfg: dict, args) -> int:
     if not hosts:
         print("no hosts registered; run `sshtsf` to add one")
         return 0
-    default = cfg.get("default_host")
     last = cfg.get("last") or {}
     for host in sorted(hosts):
         hcfg = hosts[host]
-        marks = []
-        if hcfg.get("alias"):
-            marks.append("alias %s" % hcfg["alias"])
-        if hcfg.get("target") and hcfg["target"] != host:
-            marks.append("-> %s" % hcfg["target"])
-        if hcfg.get("ecf"):
-            marks.append("ecf")
-        if host == default:
-            marks.append("default")
-        print("%s%s" % (host, "  (%s)" % ", ".join(marks) if marks else ""))
+        print(describe_host(cfg, host))
         sessions = hcfg.get("sessions") or {}
         if not sessions:
             print("    (no sessions)")
@@ -692,7 +712,8 @@ def cmd_live(cfg: dict, args) -> int:
     if args.host:
         host = resolve_host(cfg, args.host)
         if not host:
-            sys.exit("sshtsf: unknown host: %s" % args.host)
+            sys.exit("sshtsf: unknown host: %s\n%s"
+                     % (args.host, host_hint(cfg)))
         hosts = [host]
     else:
         hosts = host_names(cfg)
@@ -720,8 +741,8 @@ def cmd_add(cfg: dict, args) -> int:
                               ecf_override=args.ecf_override)
     host = resolve_host(cfg, args.host) if args.host else None
     if not host:
-        sys.exit("sshtsf: unknown host: %s (add it with `sshtsf add %s`)"
-                 % (args.host, args.host))
+        sys.exit("sshtsf: unknown host: %s (add it with `sshtsf add %s`)\n%s"
+                 % (args.host, args.host, host_hint(cfg)))
     return route_add_session(cfg, host, args.session or "", dry_run=args.dry_run,
                              ecf_override=args.ecf_override)
 
@@ -729,7 +750,8 @@ def cmd_add(cfg: dict, args) -> int:
 def cmd_rm(cfg: dict, args) -> int:
     host = resolve_host(cfg, args.host)
     if not host:
-        sys.exit("sshtsf: unknown host: %s" % args.host)
+        sys.exit("sshtsf: unknown host: %s\n%s"
+                 % (args.host, host_hint(cfg)))
 
     if args.session:
         session = resolve_session(cfg, host, args.session)
@@ -760,7 +782,8 @@ def cmd_rm(cfg: dict, args) -> int:
 def cmd_set(cfg: dict, args) -> int:
     host = resolve_host(cfg, args.host)
     if not host:
-        sys.exit("sshtsf: unknown host: %s" % args.host)
+        sys.exit("sshtsf: unknown host: %s\n%s"
+                 % (args.host, host_hint(cfg)))
 
     if args.session:
         session = resolve_session(cfg, host, args.session)
@@ -813,7 +836,8 @@ def cmd_set(cfg: dict, args) -> int:
 def cmd_default(cfg: dict, args) -> int:
     host = resolve_host(cfg, args.host)
     if not host:
-        sys.exit("sshtsf: unknown host: %s" % args.host)
+        sys.exit("sshtsf: unknown host: %s\n%s"
+                 % (args.host, host_hint(cfg)))
     cfg["default_host"] = host
     save_config(cfg)
     print("sshtsf: default host = %s" % host)
@@ -896,11 +920,12 @@ def main(argv: list[str]) -> int:
 
     if args.new is not None:
         if not positional:
-            sys.exit("sshtsf: -n needs a host: sshtsf HOST -n [NAME]")
+            sys.exit("sshtsf: -n needs a host: sshtsf HOST -n [NAME]\n%s"
+                     % host_hint(cfg))
         host = resolve_host(cfg, positional[0])
         if not host:
-            sys.exit("sshtsf: unknown host: %s (add it with `sshtsf add %s`)"
-                     % (positional[0], positional[0]))
+            sys.exit("sshtsf: unknown host: %s (add it with `sshtsf add %s`)\n%s"
+                     % (positional[0], positional[0], host_hint(cfg)))
         name = args.new or (positional[1] if len(positional) > 1 else "")
         return route_add_session(cfg, host, name, dry_run=args.dry_run,
                                  ecf_override=args.ecf_override)
@@ -921,15 +946,19 @@ def main(argv: list[str]) -> int:
         host = resolve_host(cfg, token)
         if host:
             return route_pick_session(cfg, host, args.dry_run, args.ecf_override)
-        sys.exit("sshtsf: unknown host or alias: %s\n"
-                 "        `sshtsf list` to see what is registered, "
-                 "`sshtsf add %s` to add it" % (token, token))
+        hint = host_hint(cfg)
+        # With nothing registered the hint already says to run `sshtsf', so
+        # the follow-up would only offer a second, competing suggestion.
+        if host_names(cfg):
+            hint += ("\n        `sshtsf add %s` to add it; "
+                     "`sshtsf list` shows their sessions too" % token)
+        sys.exit("sshtsf: unknown host or alias: %s\n%s" % (token, hint))
 
     if len(positional) == 2:
         host = resolve_host(cfg, positional[0])
         if not host:
-            sys.exit("sshtsf: unknown host: %s (add it with `sshtsf add %s`)"
-                     % (positional[0], positional[0]))
+            sys.exit("sshtsf: unknown host: %s (add it with `sshtsf add %s`)\n%s"
+                     % (positional[0], positional[0], host_hint(cfg)))
         session = resolve_session(cfg, host, positional[1])
         if session:
             return connect(cfg, host, session, args.dry_run, args.ecf_override)
@@ -965,7 +994,7 @@ def dispatch(cfg: dict, verb: str, rest: list[str], args) -> int:
         return cmd_add(cfg, Sub)
 
     if not rest:
-        sys.exit("sshtsf: %s needs a host" % verb)
+        sys.exit("sshtsf: %s needs a host\n%s" % (verb, host_hint(cfg)))
 
     if verb == "rm":
         return cmd_rm(cfg, Sub)
