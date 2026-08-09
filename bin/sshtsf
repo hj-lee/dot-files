@@ -18,6 +18,10 @@ socket, so emacsclient / $EDITOR / magit on the remote open in the laptop's
 Emacs -- the same forward `ssh-ecf` sets up (see common-bash-zsh-init.sh).
 It is remembered per host or per session; -e / -E override for one call.
 
+With waypipe on, the connection is wrapped in `waypipe ssh`, so applications
+started inside the remote tmux session draw on the local Wayland desktop.
+Remembered the same way; -w / -W override. Wayland clients only.
+
 Config layout (all fields but the host key are optional):
 
     default_host = "cld"
@@ -36,6 +40,7 @@ Config layout (all fields but the host key are optional):
     folder = "workplace/zatanna/src/FlexZatannaCDK"
     command = "kiro-cli"
     ecf = false             # ... except for this session
+    waypipe = true          # ... and forward Wayland for this one
 """
 
 from __future__ import annotations
@@ -49,6 +54,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+from typing import NamedTuple
 
 try:
     import tomllib
@@ -71,7 +77,17 @@ NEW_SESSION = "+ new session"
 # emacsclient-auto.sh looks for it under EMACSCLIENT_FORWARD_SOCKET.
 ECF_REMOTE_SOCKET = os.environ.get("ECF_REMOTE_SOCKET") or "/tmp/emacs-remote-socket"
 
-# Accepted spellings for the boolean `ecf` field in the config.
+# Extra options spliced into the waypipe argv, e.g. --compress zstd, --no-gpu,
+# --xwls, or --remote-bin for a host where waypipe is not on the PATH a
+# non-interactive ssh gets. An env knob rather than config fields, so waypipe's
+# whole option set is reachable without teaching this file any of it.
+WAYPIPE_OPTS = shlex.split(os.environ.get("SSHTSF_WAYPIPE_OPTS") or "")
+
+# The boolean fields, as opposed to the string ones. Both resolve the same way
+# (flag, then session, then host) and both are written as bare TOML literals.
+BOOL_FIELDS = ("ecf", "waypipe")
+
+# Accepted spellings for the boolean fields in the config.
 TRUE_WORDS = ("true", "yes", "on", "1")
 FALSE_WORDS = ("false", "no", "off", "0")
 
@@ -131,16 +147,17 @@ def dump_config(cfg: dict) -> str:
             lines.append("session = %s" % toml_str(last["session"]))
         lines.append("")
 
-    # `ecf` is keyed on presence, not truth, unlike the string fields: a
-    # session's `ecf = false` is what opts it out of a host default, so it has
-    # to survive a rewrite rather than be dropped as falsy.
+    # The booleans are keyed on presence, not truth, unlike the string fields:
+    # a session's `ecf = false` is what opts it out of a host default, so it
+    # has to survive a rewrite rather than be dropped as falsy.
     for host, hcfg in sorted((cfg.get("hosts") or {}).items()):
         lines.append("[hosts.%s]" % toml_key(host))
         for field in ("target", "alias"):
             if hcfg.get(field):
                 lines.append("%s = %s" % (field, toml_str(hcfg[field])))
-        if "ecf" in hcfg:
-            lines.append("ecf = %s" % toml_bool(hcfg["ecf"]))
+        for field in BOOL_FIELDS:
+            if field in hcfg:
+                lines.append("%s = %s" % (field, toml_bool(hcfg[field])))
         lines.append("")
 
         for sess, scfg in sorted((hcfg.get("sessions") or {}).items()):
@@ -148,8 +165,9 @@ def dump_config(cfg: dict) -> str:
             for field in ("alias", "folder", "command"):
                 if scfg.get(field):
                     lines.append("%s = %s" % (field, toml_str(scfg[field])))
-            if "ecf" in scfg:
-                lines.append("ecf = %s" % toml_bool(scfg["ecf"]))
+            for field in BOOL_FIELDS:
+                if field in scfg:
+                    lines.append("%s = %s" % (field, toml_bool(scfg[field])))
             lines.append("")
 
     return "\n".join(lines).rstrip("\n") + "\n"
@@ -314,15 +332,30 @@ def ssh_target(cfg: dict, host: str) -> str:
     return cfg["hosts"].get(host, {}).get("target") or host
 
 
-def resolve_ecf(cfg: dict, host: str, session: str, override: bool | None) -> bool:
-    """Whether to forward the Emacs socket: flag, then session, then host."""
+class Overrides(NamedTuple):
+    """Per-call answers to the boolean fields; None means "use the config".
+
+    Bundled rather than passed one parameter each, because they travel together
+    through connect(), every route_* and the subcommand shim, and a parameter
+    apiece would make six-argument signatures of all of them.
+    """
+    ecf: bool | None = None
+    waypipe: bool | None = None
+
+
+NO_OVERRIDES = Overrides()
+
+
+def resolve_flag(cfg: dict, host: str, session: str, field: str,
+                 override: bool | None) -> bool:
+    """Whether a boolean field is on: the flag, then session, then host."""
     if override is not None:
         return override
     hcfg = cfg["hosts"].get(host, {})
     scfg = (hcfg.get("sessions") or {}).get(session, {})
-    if "ecf" in scfg:
-        return bool(scfg["ecf"])
-    return bool(hcfg.get("ecf"))
+    if field in scfg:
+        return bool(scfg[field])
+    return bool(hcfg.get(field))
 
 
 def describe_host(cfg: dict, host: str) -> str:
@@ -333,8 +366,7 @@ def describe_host(cfg: dict, host: str) -> str:
         marks.append("alias %s" % hcfg["alias"])
     if hcfg.get("target") and hcfg["target"] != host:
         marks.append("-> %s" % hcfg["target"])
-    if hcfg.get("ecf"):
-        marks.append("ecf")
+    marks += [field for field in BOOL_FIELDS if hcfg.get(field)]
     if host == cfg.get("default_host"):
         marks.append("default")
     return "%s%s" % (host, "  (%s)" % ", ".join(marks) if marks else "")
@@ -430,8 +462,8 @@ def describe_session(cfg: dict, host: str, name: str, scfg: dict) -> str:
         bits.append("~/%s" % scfg["folder"])
     if scfg.get("command"):
         bits.append("-> %s" % scfg["command"])
-    if resolve_ecf(cfg, host, name, None):
-        bits.append("+ecf")
+    bits += ["+%s" % field for field in BOOL_FIELDS
+             if resolve_flag(cfg, host, name, field, None)]
     return "  ".join(bits)
 
 
@@ -550,17 +582,68 @@ def ecf_local_socket() -> str | None:
     return path
 
 
+def waypipe_local_display() -> tuple[str | None, str]:
+    """The local compositor socket, or None and the reason there isn't one.
+
+    The parallel of ecf_local_socket, down to confirming the path is really a
+    socket. Two differences: waypipe has to exist here as well as on the remote,
+    and there is no single fix for "unavailable" -- an uninstalled waypipe, a
+    machine with no compositor, and an unset XDG_RUNTIME_DIR (macOS, always)
+    call for quite different things -- so the reason is returned to be printed.
+    """
+    if shutil.which("waypipe") is None:
+        return None, "waypipe is not on PATH"
+
+    display = os.environ.get("WAYLAND_DISPLAY") or ""
+    if not display:
+        return None, "WAYLAND_DISPLAY is unset; waypipe needs a Wayland session"
+
+    # libwayland reads an absolute WAYLAND_DISPLAY as the socket path itself,
+    # and anything else as a name under XDG_RUNTIME_DIR.
+    if os.path.isabs(display):
+        path = display
+    else:
+        runtime = os.environ.get("XDG_RUNTIME_DIR") or ""
+        if not runtime:
+            return None, ("XDG_RUNTIME_DIR is unset, so WAYLAND_DISPLAY=%s "
+                          "cannot be resolved" % display)
+        path = os.path.join(runtime, display)
+
+    try:
+        if not stat.S_ISSOCK(os.stat(path).st_mode):
+            return None, "%s is not a socket" % path
+    except OSError:
+        return None, "no compositor socket at %s" % path
+    return path, ""
+
+
 def connect(cfg: dict, host: str, session: str, dry_run: bool = False,
-            ecf_override: bool | None = None) -> int:
+            over: Overrides = NO_OVERRIDES) -> int:
     scfg = cfg["hosts"][host].get("sessions", {}).get(session, {})
     target = ssh_target(cfg, host)
-    ecf = resolve_ecf(cfg, host, session, ecf_override)
+    ecf = resolve_flag(cfg, host, session, "ecf", over.ecf)
+    waypipe = resolve_flag(cfg, host, session, "waypipe", over.waypipe)
+
+    if waypipe:
+        display, why = waypipe_local_display()
+        if display is None:
+            # Same policy as ecf below: a flag is honoured or fails, a config
+            # default steps aside. The reason matters here -- it is the whole
+            # difference between "install waypipe" and "you are on a Mac".
+            if over.waypipe is not None:
+                sys.exit("sshtsf: cannot forward Wayland: %s" % why)
+            print("sshtsf: no local Wayland display (%s); connecting without it"
+                  % why, file=sys.stderr)
+            waypipe = False
 
     # -u for the same reason ssht passes it (ssh-tmux.zsh): tmux is the ssh
     # command, so the remote shell is non-interactive, never reads .zshrc and
     # never sets LC_ALL -- and the client then renders every non-ASCII cell as
     # an underscore. -u asserts UTF-8 without depending on the remote's locales.
-    remote = ["tmux", "-u", "new-session", "-A"]
+    #
+    # Plain -A under waypipe would attach immediately, before the display could
+    # be set; the create step is split out and guarded below instead.
+    remote = ["tmux", "-u", "new-session", "-d" if waypipe else "-A"]
     if scfg.get("folder"):
         remote += ["-c", scfg["folder"]]
     remote += ["-s", session]
@@ -569,6 +652,40 @@ def connect(cfg: dict, host: str, session: str, dry_run: bool = False,
         # the way a shell would so `emacs -nw .` works as written.
         remote += shlex.split(scfg["command"])
 
+    if waypipe:
+        # Teach the session waypipe's display name, rather than trusting the
+        # remote's tmux to carry it: WAYLAND_DISPLAY only joined the default
+        # update-environment in tmux 3.7, and on anything older the session
+        # never learns it at all -- `tmux show-environment WAYLAND_DISPLAY'
+        # answers "unknown variable" and GUI applications quietly open on the
+        # remote's own screen instead of here.
+        #
+        # It has to be a shell that WAYPIPE started. waypipe execs the command
+        # itself (`waypipe ... server tmux ...'), and only its children have the
+        # forwarded WAYLAND_DISPLAY -- the ssh login shell that parses this line
+        # runs earlier and would expand it to the remote's own display, or to
+        # nothing. So `sh -c' here, with $WAYLAND_DISPLAY left for it to expand.
+        #
+        # Create, set, then attach, in three steps: `-A' would attach before the
+        # variable could be set, and `-e' applies only when tmux creates the
+        # session, never when it attaches to a live one.
+        #
+        # has-session rather than `new-session -Ad', because -A makes
+        # new-session behave as attach-session and -d stops meaning detached
+        # there -- so -Ad on an EXISTING session attaches anyway, and the rest
+        # of the chain never runs. (-AD would work, but it also detaches whoever
+        # else is attached, which is not ours to do.)
+        #
+        # `=name' is an exact-match target: without it a session name that
+        # prefixes another could resolve to the wrong one.
+        tgt = shlex.quote("=" + session)
+        script = (
+            "tmux has-session -t %s 2>/dev/null || %s || exit 1; "
+            'tmux set-environment -t %s WAYLAND_DISPLAY "$WAYLAND_DISPLAY"; '
+            "exec tmux -u attach-session -t %s"
+            % (tgt, " ".join(shlex.quote(word) for word in remote), tgt, tgt))
+        remote = ["sh", "-c", script]
+
     sshopts: list[str] = []
     cleanup: list[str] = []
     if ecf:
@@ -576,7 +693,7 @@ def connect(cfg: dict, host: str, session: str, dry_run: bool = False,
         if local is None:
             # A flag is a request, so honour it or fail; a config default is a
             # preference, and should not stand between you and the session.
-            if ecf_override is not None:
+            if over.ecf is not None:
                 sys.exit("sshtsf: no local Emacs server socket found; "
                          "start Emacs first")
             print("sshtsf: no local Emacs socket; connecting without the forward",
@@ -588,11 +705,28 @@ def connect(cfg: dict, host: str, session: str, dry_run: bool = False,
             sshopts = ["-o", "ExitOnForwardFailure=yes",
                        "-R", "%s:%s" % (ECF_REMOTE_SOCKET, local)]
 
+    # -t before the target, not after it. ssh itself accepts either, but
+    # waypipe takes the first non-option word as the destination and everything
+    # past it as the command to run -- so a trailing -t becomes argv[0] of that
+    # command and it dies with `Failed to run program "-t"'.
+    #
     # Quote for the remote shell: ssh joins its command words with spaces and
     # the far side re-parses them, so an unquoted path with a space would
     # arrive as two arguments. Mirrors ${(q-)@} in ssh-tmux.zsh.
-    argv = ["ssh"] + sshopts + [target, "-t"] + \
+    argv = ["ssh"] + sshopts + ["-t", target] + \
         [shlex.quote(word) for word in remote]
+
+    if waypipe:
+        # waypipe takes its options before the mode word and passes everything
+        # after `ssh' through, so the whole command above rides along as ssh
+        # arguments -- which is what lets waypipe and ecf compose, as two
+        # independent -R forwards on one connection. waypipe adds a -t of its
+        # own; a doubled -t only means -tt, which is harmless here since there
+        # is always a terminal. No --display: waypipe's randomized
+        # per-connection name is fine, because the session is told the name
+        # above, and tmux-env-refresh in common-bash-zsh-init.sh carries it into
+        # the panes that predate this connection.
+        argv = ["waypipe"] + WAYPIPE_OPTS + ["ssh"] + argv[1:]
 
     if dry_run:
         if cleanup:
@@ -604,12 +738,13 @@ def connect(cfg: dict, host: str, session: str, dry_run: bool = False,
         subprocess.run(cleanup)
 
     remember(cfg, host, session)
-    print("sshtsf: %s -> %s%s" % (target, session, " +ecf" if sshopts else ""),
-          file=sys.stderr)
+    print("sshtsf: %s -> %s%s%s"
+          % (target, session, " +ecf" if sshopts else "",
+             " +waypipe" if waypipe else ""), file=sys.stderr)
     try:
-        os.execvp("ssh", argv)
+        os.execvp(argv[0], argv)
     except OSError as exc:
-        sys.exit("sshtsf: cannot exec ssh: %s" % exc)
+        sys.exit("sshtsf: cannot exec %s: %s" % (argv[0], exc))
 
 
 def remember(cfg: dict, host: str, session: str) -> None:
@@ -628,7 +763,7 @@ def remember(cfg: dict, host: str, session: str) -> None:
 
 def route_add_session(cfg: dict, host: str, name: str = "",
                       dry_run: bool = False,
-                      ecf_override: bool | None = None) -> int:
+                      over: Overrides = NO_OVERRIDES) -> int:
     """Register a session interactively, then connect to it."""
     print("sshtsf: new session on %s" % host, file=sys.stderr)
 
@@ -640,7 +775,7 @@ def route_add_session(cfg: dict, host: str, name: str = "",
     if existing:
         print("sshtsf: %s already exists on %s; connecting" % (existing, host),
               file=sys.stderr)
-        return connect(cfg, host, existing, dry_run, ecf_override)
+        return connect(cfg, host, existing, dry_run, over)
 
     folder = prompt_folder(ssh_target(cfg, host), label=name)
     if folder is None:
@@ -650,12 +785,16 @@ def route_add_session(cfg: dict, host: str, name: str = "",
 
     command = ask("  command to run (blank for a shell)")
 
-    # Only worth asking when it would change anything: with `ecf = true` on the
-    # host, the answer is already yes, and `set <host> <name> ecf false` is the
-    # rarer opt-out.
+    # Only worth asking when it would change anything: with the field already
+    # true on the host, the answer is yes, and `set <host> <name> <field> false`
+    # is the rarer opt-out.
     ecf = ""
     if not cfg["hosts"].get(host, {}).get("ecf"):
         ecf = ask("  forward the laptop Emacs socket? (y/N)")
+
+    waypipe = ""
+    if not cfg["hosts"].get(host, {}).get("waypipe"):
+        waypipe = ask("  forward Wayland, for GUI applications? (y/N)")
 
     # Asked last, and defaulted to the session name, so the whole entry is
     # visible by the time the shorthand for it is chosen.
@@ -672,15 +811,17 @@ def route_add_session(cfg: dict, host: str, name: str = "",
         entry["command"] = command
     if ecf.strip().lower() in TRUE_WORDS + ("y",):
         entry["ecf"] = True
+    if waypipe.strip().lower() in TRUE_WORDS + ("y",):
+        entry["waypipe"] = True
     sessions[name] = entry
 
     save_config(cfg)
     print("sshtsf: saved %s to %s" % (name, CONFIG_PATH), file=sys.stderr)
-    return connect(cfg, host, name, dry_run, ecf_override)
+    return connect(cfg, host, name, dry_run, over)
 
 
 def route_add_host(cfg: dict, name: str = "", dry_run: bool = False,
-                   ecf_override: bool | None = None) -> int:
+                   over: Overrides = NO_OVERRIDES) -> int:
     print("sshtsf: new host", file=sys.stderr)
 
     # Nothing typed yet: offer what you have already ssh'd to, so registering a
@@ -699,7 +840,7 @@ def route_add_host(cfg: dict, name: str = "", dry_run: bool = False,
         sys.exit("sshtsf: a host name is required")
     if name in cfg["hosts"]:
         print("sshtsf: %s already registered" % name, file=sys.stderr)
-        return route_pick_session(cfg, name, dry_run, ecf_override)
+        return route_pick_session(cfg, name, dry_run, over)
 
     target = ask("  ssh destination", name)
     alias = ask("  alias (blank for none)")
@@ -717,11 +858,11 @@ def route_add_host(cfg: dict, name: str = "", dry_run: bool = False,
     print("sshtsf: saved host %s" % name, file=sys.stderr)
 
     return route_add_session(cfg, name, dry_run=dry_run,
-                             ecf_override=ecf_override)
+                             over=over)
 
 
 def route_pick_session(cfg: dict, host: str, dry_run: bool = False,
-                       ecf_override: bool | None = None) -> int:
+                       over: Overrides = NO_OVERRIDES) -> int:
     """Show this host's sessions, plus an add-new option."""
     sessions = cfg["hosts"].get(host, {}).get("sessions", {}) or {}
     labels = {}
@@ -734,12 +875,12 @@ def route_pick_session(cfg: dict, host: str, dry_run: bool = False,
         return 130
     if choice == NEW_SESSION:
         return route_add_session(cfg, host, dry_run=dry_run,
-                                 ecf_override=ecf_override)
-    return connect(cfg, host, labels[choice], dry_run, ecf_override)
+                                 over=over)
+    return connect(cfg, host, labels[choice], dry_run, over)
 
 
 def route_pick_host(cfg: dict, dry_run: bool = False,
-                    ecf_override: bool | None = None) -> int:
+                    over: Overrides = NO_OVERRIDES) -> int:
     hosts = host_names(cfg)
     default = cfg.get("default_host") or (cfg.get("last") or {}).get("host")
 
@@ -754,8 +895,7 @@ def route_pick_host(cfg: dict, dry_run: bool = False,
         extras = []
         if hcfg.get("alias"):
             extras.append(hcfg["alias"])
-        if hcfg.get("ecf"):
-            extras.append("ecf")
+        extras += [field for field in BOOL_FIELDS if hcfg.get(field)]
         if host == default:
             extras.append("default")
         if extras:
@@ -767,8 +907,8 @@ def route_pick_host(cfg: dict, dry_run: bool = False,
     if choice is None:
         return 130
     if choice == NEW_HOST:
-        return route_add_host(cfg, dry_run=dry_run, ecf_override=ecf_override)
-    return route_pick_session(cfg, labels[choice], dry_run, ecf_override)
+        return route_add_host(cfg, dry_run=dry_run, over=over)
+    return route_pick_session(cfg, labels[choice], dry_run, over)
 
 
 # --------------------------------------------------------------------------
@@ -826,13 +966,13 @@ def cmd_live(cfg: dict, args) -> int:
 def cmd_add(cfg: dict, args) -> int:
     if args.session is None:
         return route_add_host(cfg, args.host or "", dry_run=args.dry_run,
-                              ecf_override=args.ecf_override)
+                              over=args.over)
     host = resolve_host(cfg, args.host) if args.host else None
     if not host:
         sys.exit("sshtsf: unknown host: %s (add it with `sshtsf add %s`)\n%s"
                  % (args.host, args.host, host_hint(cfg, ssh_hosts=True)))
     return route_add_session(cfg, host, args.session or "", dry_run=args.dry_run,
-                             ecf_override=args.ecf_override)
+                             over=args.over)
 
 
 def cmd_rm(cfg: dict, args) -> int:
@@ -878,10 +1018,10 @@ def cmd_set(cfg: dict, args) -> int:
         if not session:
             sys.exit("sshtsf: no session %s on %s" % (args.session, host))
         holder = cfg["hosts"][host]["sessions"][session]
-        allowed = ("alias", "folder", "command", "ecf")
+        allowed = ("alias", "folder", "command") + BOOL_FIELDS
     else:
         holder = cfg["hosts"][host]
-        allowed = ("alias", "target", "ecf")
+        allowed = ("alias", "target") + BOOL_FIELDS
 
     if args.field not in allowed:
         sys.exit("sshtsf: cannot set %s here; try one of: %s"
@@ -901,13 +1041,13 @@ def cmd_set(cfg: dict, args) -> int:
     elif value is None:
         sys.exit("sshtsf: set %s needs a value" % args.field)
 
-    # ecf is the one boolean field. An empty value still clears it below, which
-    # for a session means falling back to the host's setting.
-    if args.field == "ecf" and value != "":
+    # An empty value still clears a boolean below, which for a session means
+    # falling back to the host's setting.
+    if args.field in BOOL_FIELDS and value != "":
         word = value.strip().lower()
         if word not in TRUE_WORDS + FALSE_WORDS:
-            sys.exit("sshtsf: ecf takes %s or %s"
-                     % ("/".join(TRUE_WORDS), "/".join(FALSE_WORDS)))
+            sys.exit("sshtsf: %s takes %s or %s"
+                     % (args.field, "/".join(TRUE_WORDS), "/".join(FALSE_WORDS)))
         value = word in TRUE_WORDS
 
     if value == "":
@@ -916,7 +1056,8 @@ def cmd_set(cfg: dict, args) -> int:
     else:
         holder[args.field] = value
         print("sshtsf: %s = %s"
-              % (args.field, toml_bool(value) if args.field == "ecf" else value))
+              % (args.field,
+                 toml_bool(value) if args.field in BOOL_FIELDS else value))
     save_config(cfg)
     return 0
 
@@ -957,6 +1098,7 @@ def build_parser() -> argparse.ArgumentParser:
   sshtsf cld -n             register a new session on cld
   sshtsf cld -n zl          ...with zl proposed as the name
   sshtsf -e cld zc          ...forwarding the laptop Emacs socket
+  sshtsf -w cld zc          ...forwarding Wayland, for GUI applications
 
 config:
   sshtsf list               show hosts and sessions
@@ -964,8 +1106,9 @@ config:
   sshtsf add HOST [NAME]    register a host, or a session on it
   sshtsf rm HOST [NAME]     remove a session, or a host (-f)
   sshtsf set HOST [NAME] FIELD [VALUE]
-                            set alias/target/ecf, or alias/folder/command/ecf;
-                            omit VALUE for folder to browse the remote tree
+                            set alias/target, or alias/folder/command, plus
+                            ecf/waypipe on either; omit VALUE for folder to
+                            browse the remote tree
   sshtsf default HOST       set the host offered first
   sshtsf config-path        print the config file path
 
@@ -973,6 +1116,19 @@ ecf forwards the laptop's Emacs server socket to the remote, so emacsclient,
 $EDITOR and magit there open in the laptop's Emacs -- what `ssh-ecf` does, on
 a remote-tmux connection. Make it the default with `sshtsf set HOST ecf true`
 or `sshtsf set HOST SESSION ecf true`; -e / -E override for one call.
+
+waypipe wraps the whole connection in `waypipe ssh`, so applications started
+in the remote session draw on the local Wayland desktop. Set it the same way;
+-w / -W override. It needs a Wayland session here and waypipe installed at
+both ends -- on the remote, on the PATH a non-interactive ssh gets. Extra
+waypipe options (--compress, --no-gpu, --xwls, --remote-bin, ...) go in
+SSHTSF_WAYPIPE_OPTS. The two forwards are independent and compose.
+
+The session is told waypipe's display name on connect, so no tmux config is
+needed on the remote -- WAYLAND_DISPLAY only joined tmux's default
+update-environment in 3.7. Panes that predate the connection still hold the
+old value; tmux-env-refresh in common-bash-zsh-init.sh is the prompt hook
+that keeps those current.
 
 Hosts you have ssh'd to before are read from ~/.ssh/known_hosts: they are
 offered to pick from when registering a host, and listed alongside the
@@ -987,6 +1143,10 @@ registered ones when a name does not resolve.
                    help="forward the laptop's Emacs server socket")
     p.add_argument("-E", "--no-ecf", action="store_true",
                    help="do not forward, whatever the config says")
+    p.add_argument("-w", "--waypipe", action="store_true",
+                   help="forward Wayland, so GUI applications draw here")
+    p.add_argument("-W", "--no-waypipe", action="store_true",
+                   help="do not forward Wayland, whatever the config says")
     p.add_argument("--dry-run", action="store_true",
                    help="print the ssh command instead of running it")
     return p
@@ -997,8 +1157,12 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
     if args.ecf and args.no_ecf:
         parser.error("--ecf and --no-ecf are contradictory")
+    if args.waypipe and args.no_waypipe:
+        parser.error("--waypipe and --no-waypipe are contradictory")
     # None means "no override": fall back to the session's or host's setting.
-    args.ecf_override = True if args.ecf else (False if args.no_ecf else None)
+    args.over = Overrides(
+        ecf=True if args.ecf else (False if args.no_ecf else None),
+        waypipe=True if args.waypipe else (False if args.no_waypipe else None))
     cfg = load_config()
     positional = args.args
 
@@ -1021,24 +1185,24 @@ def main(argv: list[str]) -> int:
                         host_hint(cfg, ssh_hosts=True)))
         name = args.new or (positional[1] if len(positional) > 1 else "")
         return route_add_session(cfg, host, name, dry_run=args.dry_run,
-                                 ecf_override=args.ecf_override)
+                                 over=args.over)
 
     if not positional:
         if not cfg.get("hosts"):
             print("sshtsf: no config yet; let's make one", file=sys.stderr)
             return route_add_host(cfg, dry_run=args.dry_run,
-                                  ecf_override=args.ecf_override)
+                                  over=args.over)
         return route_pick_host(cfg, dry_run=args.dry_run,
-                               ecf_override=args.ecf_override)
+                               over=args.over)
 
     if len(positional) == 1:
         token = positional[0]
         pair = resolve_pair_alias(cfg, token)
         if pair:
-            return connect(cfg, pair[0], pair[1], args.dry_run, args.ecf_override)
+            return connect(cfg, pair[0], pair[1], args.dry_run, args.over)
         host = resolve_host(cfg, token)
         if host:
-            return route_pick_session(cfg, host, args.dry_run, args.ecf_override)
+            return route_pick_session(cfg, host, args.dry_run, args.over)
         hint = host_hint(cfg, ssh_hosts=True)
         # With nothing registered the hint already says to run `sshtsf', so
         # the follow-up would only offer a second, competing suggestion.
@@ -1055,12 +1219,12 @@ def main(argv: list[str]) -> int:
                         host_hint(cfg, ssh_hosts=True)))
         session = resolve_session(cfg, host, positional[1])
         if session:
-            return connect(cfg, host, session, args.dry_run, args.ecf_override)
+            return connect(cfg, host, session, args.dry_run, args.over)
         # No such session -- fall into the add-new route with the name filled in.
         print("sshtsf: no session %s on %s" % (positional[1], host),
               file=sys.stderr)
         return route_add_session(cfg, host, positional[1], dry_run=args.dry_run,
-                                 ecf_override=args.ecf_override)
+                                 over=args.over)
 
     sys.exit("sshtsf: too many arguments; see `sshtsf --help`")
 
@@ -1071,7 +1235,7 @@ def dispatch(cfg: dict, verb: str, rest: list[str], args) -> int:
         session = rest[1] if len(rest) > 1 else None
         force = args.force
         dry_run = args.dry_run
-        ecf_override = args.ecf_override
+        over = args.over
 
     if verb == "list":
         return cmd_list(cfg, Sub)
@@ -1100,7 +1264,7 @@ def dispatch(cfg: dict, verb: str, rest: list[str], args) -> int:
         # The value is optional only for `folder`, which browses when omitted.
         # SESSION is told apart from FIELD by name, since both are bare words:
         # a known session in position 2 means the 4-word form.
-        HOST_FIELDS = ("alias", "target", "ecf")
+        HOST_FIELDS = ("alias", "target") + BOOL_FIELDS
         rest2 = rest[1] if len(rest) > 1 else None
         if len(rest) == 2:
             Sub.session, Sub.field, Sub.value = None, rest[1], None

@@ -98,6 +98,61 @@ function emacs-remote {
 }
 
 ####
+# keeping a pane's environment current across reconnections
+#
+# tmux copies the variables named in update-environment out of the attaching
+# client and into the session, on every attach and not just on create --
+# WAYLAND_DISPLAY among them, which is what lets `sshtsf -w' leave waypipe's
+# randomly-named per-connection socket alone. So a session reattached over a
+# fresh connection is already right, and so is every window and pane opened
+# after that.
+#
+# What is not right is a shell that was ALREADY running in a pane: it still
+# holds the values it inherited whenever it started, so a GUI application it
+# launches goes looking for the socket of a connection that is gone. This hook
+# is the fix. tmux emits the new values as shell syntax itself, so there is
+# nothing to write anywhere -- just re-read them each prompt.
+function tmux-env-refresh {
+    # Costs one string test outside tmux, which is the laptop's usual case.
+    [ -n "$TMUX" ] || return 0
+
+    local out line
+    # One call, not one per variable: show-environment takes at most one name,
+    # so asking for five would mean five forks a prompt. Read the lot and
+    # filter here.
+    out=$(command tmux show-environment -s 2>/dev/null) || return 0
+
+    while IFS= read -r line; do
+        # A `case' pattern rather than a loop over a list of names: zsh does
+        # not word-split unquoted parameters and bash does, and this file has
+        # to behave identically under both.
+        #
+        # Only the assignments. show-environment also emits `unset FOO;' for
+        # anything the attaching client lacks, and honouring that would strip
+        # SSH_AUTH_SOCK out of every pane the moment you attach from a machine
+        # with no agent. The price is that a dead WAYLAND_DISPLAY lingers after
+        # attaching from a non-Wayland client rather than being cleared, which
+        # is much the cheaper of the two failures.
+        case $line in
+            WAYLAND_DISPLAY=*|DISPLAY=*|SSH_AUTH_SOCK=*|SSH_CONNECTION=*|XAUTHORITY=*)
+                eval "$line" ;;
+        esac
+    done <<< "$out"
+}
+
+# Registered once. A guard variable rather than testing membership of
+# precmd_functions, because zsh's ${array[(I)name]} would still have to PARSE
+# under bash, where it does not mean anything.
+if [ -z "$TMUX_ENV_REFRESH_HOOKED" ]; then
+    TMUX_ENV_REFRESH_HOOKED=1
+    if [ -n "$ZSH_VERSION" ]; then
+        precmd_functions+=(tmux-env-refresh)
+    elif [ -n "$BASH_VERSION" ]; then
+        PROMPT_COMMAND="tmux-env-refresh${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+    fi
+fi
+
+####
 # picker plumbing
 #
 # Pickers themselves live where their domain does -- e.g. bws-pick (brazil
