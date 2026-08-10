@@ -1,0 +1,55 @@
+#!/bin/sh
+#
+# ec-browse -- open URLs in the browser of whichever Emacs emacsclient reaches.
+#
+# With an ssh-ecf forward live (see emacs-remote), that is the laptop's Emacs,
+# so a URL printed by a tool on the cloud desktop opens in the laptop browser.
+#
+# Suitable as $BROWSER: it takes the URLs as plain arguments, which is what
+# every $BROWSER consumer does when the value has no '%s' placeholder.
+#
+#   ec-browse https://example.com [URL...]
+#
+# Env knobs:
+#   EC_BROWSE_EMACSCLIENT  emacsclient to use; defaults to the sibling
+#                          emacsclient-auto.sh, else plain emacsclient
+#   EC_BROWSE_FUNCTION     elisp function to call; default browse-url.
+#                          Set to browse-url-default-browser to force the
+#                          external browser even when browse-url-browser-function
+#                          is something in-Emacs like eww.
+
+if [ $# -eq 0 ]; then
+    echo "usage: ec-browse URL [URL...]" >&2
+    exit 2
+fi
+
+# Prefer the routing wrapper next to this script, so ec-browse follows the
+# same local/forwarded decision as $EDITOR does.
+if [ -n "$EC_BROWSE_EMACSCLIENT" ]; then
+    ec="$EC_BROWSE_EMACSCLIENT"
+else
+    self=$(command -v -- "$0" 2>/dev/null || printf '%s' "$0")
+    self=$(readlink -f -- "$self" 2>/dev/null || printf '%s' "$self")
+    dir=$(dirname -- "$self")
+    if [ -x "$dir/emacsclient-auto.sh" ]; then
+        ec="$dir/emacsclient-auto.sh"
+    else
+        ec=emacsclient
+    fi
+fi
+
+fn="${EC_BROWSE_FUNCTION:-browse-url}"
+
+status=0
+for url in "$@"; do
+    # Escape for an elisp string literal: backslash first, then double quote.
+    esc=$(printf '%s' "$url" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+    # browse-url is not a file-visiting call, so no TRAMP prefix applies -- a
+    # URL must reach the remote Emacs unprefixed. emacsclient-auto.sh already
+    # skips the prefix for -e/--eval.
+    if ! "$ec" -e "($fn \"$esc\")" > /dev/null; then
+        echo "ec-browse: failed to open $url" >&2
+        status=1
+    fi
+done
+exit $status

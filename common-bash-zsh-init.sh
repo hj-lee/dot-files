@@ -79,8 +79,9 @@ function ssh-ecf {
     command ssh "${ECF_SSH_OPTS[@]}" "${@}"
 }
 
-# Toggle routing of emacsclient / $EDITOR / magit to the forwarded (laptop)
-# Emacs. Default method is ssh; use sshx if TRAMP stalls on the remote prompt.
+# Toggle routing of emacsclient / $EDITOR / $BROWSER / magit to the forwarded
+# (laptop) Emacs. Default method is ssh; use sshx if TRAMP stalls on the remote
+# prompt.
 #   emacs-remote [ssh|sshx] [user@host]
 #   emacs-remote off
 function emacs-remote {
@@ -88,6 +89,7 @@ function emacs-remote {
         unset EMACSCLIENT_TRAMP_PREFIX
         unset -f emacsclient 2>/dev/null
         export EDITOR=emacsclient
+        unset BROWSER
         return
     fi
     local method="${1:-ssh}"
@@ -95,6 +97,9 @@ function emacs-remote {
     export EMACSCLIENT_TRAMP_PREFIX="/${method}:${target}:"
     export EDITOR="$EMACSCLIENT_AUTO"
     emacsclient() { command "$EMACSCLIENT_AUTO" "$@"; }
+    # Send URLs to the laptop's browser via its Emacs. Absolute path because
+    # $BROWSER is exec'd by other tools, which may not share our PATH.
+    [[ -x $DIR/bin/ec-browse ]] && export BROWSER="$DIR/bin/ec-browse"
 }
 
 ####
