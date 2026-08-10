@@ -10,6 +10,7 @@ so that a two-word invocation replaces a hand-written alias per session.
     sshtsf cld zc          connect to session zc on cld
     sshtsf cldzc           the same, via a host+session alias
     sshtsf cld -n [NAME]   register a new session, then connect
+    sshtsf remote cld      git remote add, for this repo on cld
 
 Selections use fzf when it is on PATH and fall back to a numbered menu.
 
@@ -422,6 +423,91 @@ def ssh_host_candidates(cfg: dict) -> list[str]:
     return [host for host in ssh_known_hosts() if host not in taken]
 
 
+def logical_cwd() -> str:
+    """The working directory as the shell names it, symlinks unresolved.
+
+    os.getcwd() answers with the physical path, which is the wrong one here:
+    with ~/workplace a symlink to /Volumes/workplace, the cwd comes back as
+    /Volumes/workplace/... and its path relative to ~ is then a useless
+    ../../Volumes/workplace/... -- no use at all for a mirrored remote path.
+    The shell's own idea of where it is lives in PWD, which keeps the symlink.
+
+    PWD is inherited, so it can be stale or belong to a different directory
+    entirely; the stat comparison is what makes trusting it safe. Same device
+    and inode means it really is another name for this directory.
+    """
+    pwd = os.environ.get("PWD") or ""
+    if pwd and os.path.isabs(pwd):
+        try:
+            here, there = os.stat("."), os.stat(pwd)
+            if (here.st_dev, here.st_ino) == (there.st_dev, there.st_ino):
+                return pwd
+        except OSError:
+            pass
+    return os.getcwd()
+
+
+def git_repo_root() -> str | None:
+    """The root of the git repo containing the cwd, or None if there is none.
+
+    --show-cdup rather than --show-toplevel, because toplevel is resolved and
+    would undo the care taken in logical_cwd. cdup is relative -- empty at the
+    root, ../ one level down -- so joining it onto the logical path walks up to
+    the root without resolving anything.
+    """
+    try:
+        proc = subprocess.run(["git", "rev-parse", "--show-cdup"], text=True,
+                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                              timeout=10)
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return os.path.normpath(os.path.join(logical_cwd(), proc.stdout.strip()))
+
+
+def home_relative_repo() -> tuple[str | None, str]:
+    """(folder, root) for the current repo: its path relative to ~.
+
+    folder is what a mirrored remote path is built from, in the same form the
+    session `folder' fields take -- relative to $HOME, because that is the one
+    thing both machines agree on. None means there is nothing to mirror, and
+    root says why: empty for "not a repo at all", otherwise the repo root that
+    turned out to sit outside $HOME.
+    """
+    root = git_repo_root()
+    if root is None:
+        return None, ""
+    folder = os.path.relpath(root, os.path.expanduser("~"))
+    if folder.startswith(".."):
+        return None, root
+    return folder, root
+
+
+def show_home_path(folder: str) -> str:
+    """`~/dot-files' -- a home-relative folder as something readable."""
+    return "~" if folder == "." else "~/%s" % folder
+
+
+def git_remote_url(name: str) -> str | None:
+    """The URL of an existing git remote, or None if there is no such remote.
+
+    get-url exits 2 for a remote that does not exist, but any non-zero is taken
+    as absent here: the only thing the caller does with the answer is choose
+    between `remote add' and `remote set-url', and git itself rejects the wrong
+    one of those.
+    """
+    try:
+        proc = subprocess.run(["git", "remote", "get-url", name], text=True,
+                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                              timeout=10)
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout.strip() or None
+
+
 def host_hint(cfg: dict, ssh_hosts: bool = False) -> str:
     """What is registered, for the messages that reject a host name.
 
@@ -509,6 +595,34 @@ def remote_dirs(target: str, depth: int = FOLDER_DEPTH) -> list[str]:
     if proc.returncode != 0:
         return []
     return [line for line in proc.stdout.splitlines() if line.strip()]
+
+
+def remote_is_repo(target: str, folder: str) -> bool | None:
+    """Whether folder on target is a git repo. None if it could not be told.
+
+    Three answers rather than two, because "not a repo" and "could not ask" call
+    for quite different things: the first is worth a warning, the second is an
+    unreachable host or an ssh that never came back, and warning about the path
+    then would be crying wolf.
+
+    git's exit status is echoed and read from stdout rather than taken from ssh:
+    ssh reports the remote command's status as its own, so a 255 from ssh itself
+    would otherwise be indistinguishable from a failure over there. Both streams
+    are discarded -- ssh may print banners (host keys, post-quantum warnings)
+    that have no business in the middle of this.
+    """
+    script = "git -C %s rev-parse --git-dir >/dev/null 2>&1; echo $?" \
+        % shlex.quote(folder)
+    try:
+        proc = subprocess.run(["ssh", "-o", "BatchMode=yes", target, script],
+                              text=True, stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL, timeout=20)
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+    status = proc.stdout.strip().splitlines()
+    if proc.returncode != 0 or not status or not status[-1].isdigit():
+        return None
+    return status[-1] == "0"
 
 
 def show_folder(folder: str) -> None:
@@ -1073,6 +1187,96 @@ def cmd_default(cfg: dict, args) -> int:
     return 0
 
 
+def pick_registered_host(cfg: dict) -> str | None:
+    """Choose among the registered hosts, default or last-used first.
+
+    route_pick_host's picker without the `+ new host' arm: this is for the
+    commands that act on a host you already have, where registering a new one
+    is a detour rather than the point.
+    """
+    hosts = host_names(cfg)
+    if not hosts:
+        return None
+    default = cfg.get("default_host") or (cfg.get("last") or {}).get("host")
+    ordered = ([default] if default in hosts else []) + \
+              [h for h in hosts if h != default]
+    labels = {describe_host(cfg, host): host for host in ordered}
+    choice = pick(list(labels), "host>", "hosts")
+    return labels.get(choice) if choice else None
+
+
+def cmd_remote(cfg: dict, args) -> int:
+    """Add a git remote for this repo on a remote host.
+
+    The mirror assumption this file is built around, applied to git: the same
+    package is checked out at the same path relative to $HOME on both machines,
+    so the remote's URL is derivable rather than something to type. That makes
+    the other checkout fetchable -- a branch pushed nowhere, a work in progress
+    to diff against -- without either side going through a server.
+    """
+    folder, root = home_relative_repo()
+    if folder is None:
+        if not root:
+            sys.exit("sshtsf: not in a git repository")
+        sys.exit("sshtsf: %s is not under %s, so there is no mirrored path "
+                 "to point at" % (root, os.path.expanduser("~")))
+
+    if args.host:
+        host = resolve_host(cfg, args.host)
+        if not host:
+            sys.exit("sshtsf: unknown host: %s\n%s"
+                     % (args.host, host_hint(cfg, ssh_hosts=True)))
+    else:
+        host = pick_registered_host(cfg)
+        if not host:
+            if not cfg.get("hosts"):
+                sys.exit("sshtsf: no hosts registered; run `sshtsf` to add one")
+            return 130
+
+    # The token as typed, so `sshtsf remote c' names the remote c: the name you
+    # reach for is the one you already use for the machine. A host chosen from
+    # the menu was never typed, so it falls back to the host key.
+    name = args.name or args.host or host
+    target = ssh_target(cfg, host)
+
+    # The scp-like form, not ssh://: its path is already relative to the remote
+    # $HOME, matching `folder' exactly, and the destination goes through
+    # ~/.ssh/config the same way `ssh cld' does -- so a Host block's User, Port
+    # or ProxyJump applies with nothing restated here.
+    url = "%s:%s" % (target, folder)
+
+    existing = git_remote_url(name)
+    if existing is not None and not args.force:
+        if existing == url:
+            print("sshtsf: remote %s already points at %s" % (name, url))
+            return 0
+        sys.exit("sshtsf: remote %s already exists\n          %s\n"
+                 "        pass -f to point it at the mirrored path"
+                 % (name, existing))
+
+    argv = ["git", "remote", "set-url" if existing is not None else "add",
+            name, url]
+
+    if args.dry_run:
+        print(" ".join(argv))
+        return 0
+
+    # Advisory only, and after the checks above: a missing checkout over there is
+    # worth saying out loud, but it is not a reason to withhold the remote --
+    # cloning into place is often the very next thing done.
+    if remote_is_repo(target, folder) is False:
+        print("sshtsf: %s has no git repo at %s\n"
+              "        adding the remote anyway"
+              % (host, show_home_path(folder)), file=sys.stderr)
+
+    proc = subprocess.run(argv)
+    if proc.returncode != 0:
+        return proc.returncode
+    print("sshtsf: %s %s -> %s"
+          % ("repointed" if existing is not None else "added", name, url))
+    return 0
+
+
 def cmd_path(cfg: dict, args) -> int:
     print(CONFIG_PATH)
     return 0
@@ -1082,7 +1286,8 @@ def cmd_path(cfg: dict, args) -> int:
 # entry point
 # --------------------------------------------------------------------------
 
-SUBCOMMANDS = {"list", "live", "add", "rm", "set", "default", "config-path"}
+SUBCOMMANDS = {"list", "live", "add", "rm", "set", "default", "remote",
+               "config-path"}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1110,6 +1315,9 @@ config:
                             ecf/waypipe on either; omit VALUE for folder to
                             browse the remote tree
   sshtsf default HOST       set the host offered first
+  sshtsf remote [HOST] [NAME]
+                            git remote add, for this repo on HOST (-f to
+                            repoint an existing one)
   sshtsf config-path        print the config file path
 
 ecf forwards the laptop's Emacs server socket to the remote, so emacsclient,
@@ -1133,12 +1341,27 @@ that keeps those current.
 Hosts you have ssh'd to before are read from ~/.ssh/known_hosts: they are
 offered to pick from when registering a host, and listed alongside the
 registered ones when a name does not resolve.
+
+`remote' applies this file's mirror assumption to git. Run it in a repo and it
+adds a git remote for the same path on the other machine -- the repo's path
+relative to $HOME, which is the form the session folders take too -- so the
+other checkout is fetchable without either side going through a server:
+
+  cd ~/workplace/misc/src/LapinShell
+  sshtsf remote cld         git remote add cld cld:workplace/misc/src/LapinShell
+  git fetch cld
+
+The remote is named for the host as you typed it, so `sshtsf remote c' names it
+c; pass NAME for something else. The URL is the scp-like target:path form, so
+the destination resolves through ~/.ssh/config as usual. The repo has to live
+under $HOME at both ends for a mirrored path to exist at all.
 """)
     p.add_argument("args", nargs="*", metavar="ARG")
     p.add_argument("-n", "--new", nargs="?", const="", default=None,
                    metavar="NAME", help="register a new session, then connect")
     p.add_argument("-f", "--force", action="store_true",
-                   help="with rm HOST: remove even if sessions remain")
+                   help="with rm HOST: remove even if sessions remain; "
+                        "with remote: repoint one that already exists")
     p.add_argument("-e", "--ecf", action="store_true",
                    help="forward the laptop's Emacs server socket")
     p.add_argument("-E", "--no-ecf", action="store_true",
@@ -1250,6 +1473,15 @@ def dispatch(cfg: dict, verb: str, rest: list[str], args) -> int:
         if rest and resolve_host(cfg, rest[0]) and len(rest) == 1:
             Sub.session = ""  # existing host, no name given -> add a session
         return cmd_add(cfg, Sub)
+
+    # Above the "needs a host" guard below: bare `remote' is legal and picks a
+    # host from a menu, the repo being the argument that actually matters.
+    if verb == "remote":
+        # remote [HOST] [NAME] -- NAME defaults to HOST as typed.
+        if len(rest) > 2:
+            sys.exit("sshtsf: remote [HOST] [NAME]")
+        Sub.name = rest[1] if len(rest) > 1 else None
+        return cmd_remote(cfg, Sub)
 
     if not rest:
         sys.exit("sshtsf: %s needs a host\n%s" % (verb, host_hint(cfg)))
