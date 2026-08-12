@@ -1,7 +1,8 @@
 #!/usr/bin/env zsh
 ####
 # Wire this repo into a host's zsh: install oh-my-zsh if it is missing, clone
-# the custom plugins, and point ~/.zshrc at dot-zshrc.zsh.
+# the custom plugins, point ~/.zshrc at dot-zshrc.zsh, and link
+# ~/.claude/CLAUDE.md to the copy here.
 #
 #   setup-zsh.zsh [-n|--dry-run] [-u|--update] [-h|--help]
 #
@@ -255,9 +256,9 @@ function write-minimal-zshrc {
 # Numbered rather than timestamped, so the sequence reads in order and a run
 # that changes nothing adds nothing.
 function next-backup {
-    local n=1
-    while [[ -e $ZSHRC.bak-$n ]]; do (( n++ )); done
-    print -r -- "$ZSHRC.bak-$n"
+    local target=$1 n=1
+    while [[ -e $target.bak-$n ]]; do (( n++ )); done
+    print -r -- "$target.bak-$n"
 }
 
 if [[ ! -e $ZSHRC ]]; then
@@ -269,7 +270,7 @@ elif (( ! ZSHRC_EXISTED )); then
     # it rather than appending -- it sources $ZSH/oh-my-zsh.sh with a theme and
     # plugin list of its own, and dot-zshrc.zsh does that properly a second
     # time. Kept as a backup, since it is the reference for what omz supports.
-    backup=$(next-backup)
+    backup=$(next-backup "$ZSHRC")
     note "oh-my-zsh wrote its template -- replacing it (kept as $backup)"
     run command mv "$ZSHRC" "$backup" || exit 1
     write-minimal-zshrc
@@ -281,7 +282,7 @@ elif zshrc-is-wired; then
     # ~/.zshrc.bak-<n> on every re-run.
     SKIPPED+=("~/.zshrc (already wired)")
 else
-    backup=$(next-backup)
+    backup=$(next-backup "$ZSHRC")
     note "backing up to $backup"
     run command cp -p "$ZSHRC" "$backup" || exit 1
 
@@ -297,7 +298,51 @@ else
 fi
 
 ##
-## 5. summary
+## 5. ~/.claude/CLAUDE.md
+##
+## A symlink rather than a copy, so editing either path edits the tracked file
+## and there is no second version to drift.
+##
+## The tracked file ends with `@~/.claude/CLAUDE.local.md', a path this script
+## deliberately leaves alone: that is where work-specific guidance goes, and on
+## a given host it is usually itself a symlink into some other checkout. Claude
+## Code skips an import it cannot resolve, so a host without one is fine.
+
+say ""
+say "== ~/.claude/CLAUDE.md"
+
+typeset -g CLAUDE_SRC=$REPO/claude/CLAUDE.md
+typeset -g CLAUDE_LINK=$HOME/.claude/CLAUDE.md
+
+if [[ ! -r $CLAUDE_SRC ]]; then
+    note "no claude/CLAUDE.md in the repo -- nothing to link"
+    SKIPPED+=("~/.claude/CLAUDE.md (nothing to link)")
+elif [[ -L $CLAUDE_LINK && ${CLAUDE_LINK:A} == ${CLAUDE_SRC:A} ]]; then
+    note "already linked to ${CLAUDE_SRC/#$HOME/~}"
+    SKIPPED+=("~/.claude/CLAUDE.md (already linked)")
+elif [[ -L $CLAUDE_LINK ]]; then
+    # Someone pointed this somewhere on purpose; say where and leave it. The
+    # regular-file case below is different -- that is just a file, and keeping a
+    # copy of it loses nothing.
+    warn "$CLAUDE_LINK already links to ${CLAUDE_LINK:A}"
+    warn "remove it and re-run to link this repo's copy instead"
+    SKIPPED+=("~/.claude/CLAUDE.md (links elsewhere)")
+else
+    run mkdir -p "${CLAUDE_LINK:h}" || exit 1
+    if [[ -e $CLAUDE_LINK ]]; then
+        backup=$(next-backup "$CLAUDE_LINK")
+        note "backing up the existing file to $backup"
+        run command mv "$CLAUDE_LINK" "$backup" || exit 1
+        CHANGED+=("linked ~/.claude/CLAUDE.md (previous file kept as $backup)")
+    else
+        CHANGED+=("linked ~/.claude/CLAUDE.md -> ${CLAUDE_SRC/#$HOME/~}")
+    fi
+    note "linking to $CLAUDE_SRC"
+    run command ln -s "$CLAUDE_SRC" "$CLAUDE_LINK" || exit 1
+fi
+
+##
+## 6. summary
 ##
 
 say ""

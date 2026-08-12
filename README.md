@@ -16,9 +16,10 @@ git clone <this repo> ~/dot-files
 exec zsh
 ```
 
-`setup-zsh.zsh` installs oh-my-zsh if it is missing, clones the two custom plugins, and wires
-`~/.zshrc`. It is safe to re-run: every step is guarded, so a second run reports what it found and
-changes nothing — no repeated backups, and no git calls once everything is in place.
+`setup-zsh.zsh` installs oh-my-zsh if it is missing, clones the two custom plugins, wires `~/.zshrc`,
+and symlinks `~/.claude/CLAUDE.md` to the copy here. It is safe to re-run: every step is guarded, so
+a second run reports what it found and changes nothing — no repeated backups, and no git calls once
+everything is in place.
 
 ```
 setup-zsh.zsh [-n|--dry-run] [-u|--update] [-h|--help]
@@ -44,6 +45,9 @@ RUNZSH=no KEEP_ZSHRC=yes CHSH=no \
 
 # 3. Point ~/.zshrc at this repo (this is all minimal.zshrc contains).
 echo 'source ~/dot-files/dot-zshrc.zsh' >> ~/.zshrc
+
+# 4. Claude Code's user-scope instructions.
+ln -s ~/dot-files/claude/CLAUDE.md ~/.claude/CLAUDE.md
 ```
 
 On a host with no `~/.zshrc` at all, oh-my-zsh's installer writes its template — which sources
@@ -115,8 +119,9 @@ Entry points:
 | `dot-zshrc.zsh` | the zsh entry point: theme, plugin list, and the load order above |
 | `dot-bashrc.bash` | the bash entry point; unmaintained, kept working |
 | `minimal.zshrc`, `minimal.bashrc` | the one-line `~/.zshrc` / `~/.bashrc` this repo expects |
-| `setup-zsh.zsh` | bootstrap: oh-my-zsh, plugins, `~/.zshrc` |
+| `setup-zsh.zsh` | bootstrap: oh-my-zsh, plugins, `~/.zshrc`, `~/.claude/CLAUDE.md` |
 | `omz-plugins-install.zsh` | clones the plugins oh-my-zsh does not ship; `--list`, `-u` |
+| `claude/CLAUDE.md` | Claude Code user-scope instructions, symlinked to `~/.claude/CLAUDE.md` |
 
 Sourced in turn:
 
@@ -160,6 +165,25 @@ shell* needs it:
 `DEFAULT_USER`, a Homebrew `shellenv`, and a build system's shell completion are all examples of what
 belongs in one of these rather than in a tracked file. `setup-zsh.zsh` does not create them; add one
 when you need it.
+
+## Claude Code
+
+`claude/CLAUDE.md` holds the user-scope instructions, and `setup-zsh.zsh` symlinks it to
+`~/.claude/CLAUDE.md` — a link, not a copy, so editing either path edits the tracked file.
+
+Its last line imports `~/.claude/CLAUDE.local.md`, which this repo does not track and setup does not
+create. That is where work-specific guidance goes — build system, code-review tooling, anything tied
+to one employer or machine — usually as a symlink to a file in some other checkout:
+
+```sh
+ln -s /path/to/some/other/repo/CLAUDE.local.md ~/.claude/CLAUDE.local.md
+```
+
+Two reasons for the indirection rather than importing the other checkout directly: the path is
+host-specific, and this repo is public, so even the name of the other repo stays out of it. Claude
+Code resolves `@` imports up to four hops and skips one it cannot find, so a host without the local
+file loads the tracked half on its own.
+
 
 ## Command reference
 
