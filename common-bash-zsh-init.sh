@@ -328,8 +328,16 @@ alias lstla='ls -atl | less'
 alias lssl='ls -Sl | less'
 
 alias dusl='du $* | sort -nr | less'
+alias dusls='du -s * .??* | sort -nr'
 
 alias l='zless -i'
+
+alias st=sshtsf
+
+alias cddf='cd ~/dot-files'
+alias cdhe='cd ~/hjlee-emacs-init'
+
+# 
 
 alias ko='LANG=ko_KR'
 alias ko.utf8='LANG=ko_KR.UTF-8'
