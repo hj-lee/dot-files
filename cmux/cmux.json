@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/manaflow-ai/cmux/main/web/data/cmux.schema.json",
+  "schemaVersion": 1,
+
+  // JSONC: cmux reads this file with comments allowed. Only file-managed settings
+  // belong here -- a key left out falls back to whatever Settings has saved, so
+  // there is no need to carry cmux's full commented template around. `cmux config
+  // paths' prints the template it writes when this file is missing.
+  //
+  // `cmux reload-config' applies an edit without restarting the app.
+
+  // 110 is the smallest step above the 100% design size: the schema allows 50-200
+  // in steps of 10, so this is a percentage, not a point size. Terminals, tab
+  // titles, sidebar, settings, and chrome all scale together; rendered browser
+  // pages do not (zoom those with Cmd-= / Cmd--).
+  "app": {
+    "globalFontMagnification": 110
+  }
+}

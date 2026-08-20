@@ -17,7 +17,8 @@ exec zsh
 ```
 
 `setup-zsh.zsh` installs oh-my-zsh if it is missing, clones the two custom plugins, wires `~/.zshrc`,
-and symlinks `~/.claude/CLAUDE.md` to the copy here. It is safe to re-run: every step is guarded, so
+and symlinks `~/.claude/CLAUDE.md` — and, on macOS, `~/.config/cmux/cmux.json` — to the copies here.
+It is safe to re-run: every step is guarded, so
 a second run reports what it found and changes nothing — no repeated backups, and no git calls once
 everything is in place.
 
@@ -48,6 +49,12 @@ echo 'source ~/dot-files/dot-zshrc.zsh' >> ~/.zshrc
 
 # 4. Claude Code's user-scope instructions.
 ln -s ~/dot-files/claude/CLAUDE.md ~/.claude/CLAUDE.md
+
+# 5. macOS only: cmux settings. The file already there is cmux's commented
+#    template, which the app rewrites whenever the path is missing.
+mv ~/.config/cmux/cmux.json ~/.config/cmux/cmux.json.bak-1
+ln -s ~/dot-files/cmux/cmux.json ~/.config/cmux/cmux.json
+cmux reload-config
 ```
 
 On a host with no `~/.zshrc` at all, oh-my-zsh's installer writes its template — which sources
@@ -119,9 +126,10 @@ Entry points:
 | `dot-zshrc.zsh` | the zsh entry point: theme, plugin list, and the load order above |
 | `dot-bashrc.bash` | the bash entry point; unmaintained, kept working |
 | `minimal.zshrc`, `minimal.bashrc` | the one-line `~/.zshrc` / `~/.bashrc` this repo expects |
-| `setup-zsh.zsh` | bootstrap: oh-my-zsh, plugins, `~/.zshrc`, `~/.claude/CLAUDE.md` |
+| `setup-zsh.zsh` | bootstrap: oh-my-zsh, plugins, `~/.zshrc`, `~/.claude/CLAUDE.md`, `~/.config/cmux/cmux.json` |
 | `omz-plugins-install.zsh` | clones the plugins oh-my-zsh does not ship; `--list`, `-u` |
 | `claude/CLAUDE.md` | Claude Code user-scope instructions, symlinked to `~/.claude/CLAUDE.md` |
+| `cmux/cmux.json` | cmux settings, symlinked to `~/.config/cmux/cmux.json` (macOS) |
 
 Sourced in turn:
 
@@ -184,6 +192,18 @@ host-specific, and this repo is public, so even the name of the other repo stays
 Code resolves `@` imports up to four hops and skips one it cannot find, so a host without the local
 file loads the tracked half on its own.
 
+## cmux
+
+`cmux/cmux.json` is symlinked to `~/.config/cmux/cmux.json`, and holds only the settings worth
+carrying between hosts — currently `app.globalFontMagnification`, the one knob that scales terminals,
+tab titles, sidebar, and chrome together. It is a percentage rather than a point size: 50–200 in
+steps of 10, where 100 is the design size. Any key left out of the file falls back to whatever the
+app's Settings has saved, so there is no need to track cmux's full commented template. `cmux
+reload-config` applies an edit — no restart.
+
+Anything the terminal itself owns — font family and size, transparency, theme, keybinds — is Ghostty
+configuration, which cmux reads from `~/.config/ghostty/config` and this repo does not track. Set
+`font-size` there to size terminal text alone, leaving the rest of the app where it is.
 
 ## Command reference
 

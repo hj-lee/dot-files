@@ -2,7 +2,7 @@
 ####
 # Wire this repo into a host's zsh: install oh-my-zsh if it is missing, clone
 # the custom plugins, point ~/.zshrc at dot-zshrc.zsh, and link
-# ~/.claude/CLAUDE.md to the copy here.
+# ~/.claude/CLAUDE.md and (on macOS) ~/.config/cmux/cmux.json to the copies here.
 #
 #   setup-zsh.zsh [-n|--dry-run] [-u|--update] [-h|--help]
 #
@@ -342,7 +342,51 @@ else
 fi
 
 ##
-## 6. summary
+## 6. ~/.config/cmux/cmux.json
+##
+## Same shape as step 5, and macOS-only: cmux ships as a Mac app, so on any other
+## host there is nothing to point at.
+##
+## The file this replaces is cmux's own all-commented template, which the app
+## rewrites whenever the path is missing -- so the backup below is a courtesy,
+## not the only copy. Settings absent from the tracked file keep whatever value
+## the app has saved; `cmux reload-config' picks up an edit without a restart.
+
+say ""
+say "== ~/.config/cmux/cmux.json"
+
+typeset -g CMUX_SRC=$REPO/cmux/cmux.json
+typeset -g CMUX_LINK=$HOME/.config/cmux/cmux.json
+
+if [[ $OSTYPE != darwin* ]]; then
+    note "not macOS -- cmux does not run here"
+    SKIPPED+=("~/.config/cmux/cmux.json (not macOS)")
+elif [[ ! -r $CMUX_SRC ]]; then
+    note "no cmux/cmux.json in the repo -- nothing to link"
+    SKIPPED+=("~/.config/cmux/cmux.json (nothing to link)")
+elif [[ -L $CMUX_LINK && ${CMUX_LINK:A} == ${CMUX_SRC:A} ]]; then
+    note "already linked to ${CMUX_SRC/#$HOME/~}"
+    SKIPPED+=("~/.config/cmux/cmux.json (already linked)")
+elif [[ -L $CMUX_LINK ]]; then
+    warn "$CMUX_LINK already links to ${CMUX_LINK:A}"
+    warn "remove it and re-run to link this repo's copy instead"
+    SKIPPED+=("~/.config/cmux/cmux.json (links elsewhere)")
+else
+    run mkdir -p "${CMUX_LINK:h}" || exit 1
+    if [[ -e $CMUX_LINK ]]; then
+        backup=$(next-backup "$CMUX_LINK")
+        note "backing up the existing file to $backup"
+        run command mv "$CMUX_LINK" "$backup" || exit 1
+        CHANGED+=("linked ~/.config/cmux/cmux.json (previous file kept as $backup)")
+    else
+        CHANGED+=("linked ~/.config/cmux/cmux.json -> ${CMUX_SRC/#$HOME/~}")
+    fi
+    note "linking to $CMUX_SRC"
+    run command ln -s "$CMUX_SRC" "$CMUX_LINK" || exit 1
+fi
+
+##
+## 7. summary
 ##
 
 say ""
