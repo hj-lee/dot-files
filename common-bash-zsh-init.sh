@@ -290,6 +290,24 @@ add-to-path ~/usr/android-studio/bin
 add-to-path ~/.cargo/bin
 
 
+### cmux
+##
+## The remote CLI that talks back to the app (new-workspace, list-panes, ...).
+## `cmux ssh' hands the remote a generated ZDOTDIR whose .zshrc is what puts
+## this directory on PATH; `cmux ssh-tmux' gives the connection to tmux
+## instead, so no such shell ever runs and the panes are left without the
+## command. The directory is the same either way, and the wrapper in it reads
+## the live relay address from ~/.cmux/socket_addr on every call, so PATH is
+## the whole of what is missing -- reconnecting on a new port needs nothing
+## re-sourced.
+##
+## Only PATH, though: the app's per-terminal CMUX_WORKSPACE_ID / CMUX_PANEL_ID
+## do not reach a tmux pane either, so commands that mean "here" resolve to
+## whatever the app has focused instead of to the calling pane.
+
+add-to-path ~/.cmux/bin
+
+
 
 ## Nautilus open in terminal Desktop hack
 
