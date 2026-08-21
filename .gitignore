@@ -3,3 +3,5 @@
 /local-zsh-init.zsh
 /pre-omz-local-init.zsh
 /.idea/
+/cmux/cmux.json
+/cmux/cmux.local.json

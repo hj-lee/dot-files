@@ -344,25 +344,50 @@ fi
 ##
 ## 6. ~/.config/cmux/cmux.json
 ##
-## Same shape as step 5, and macOS-only: cmux ships as a Mac app, so on any other
-## host there is nothing to point at.
+## Symlink shape as step 5, macOS-only (cmux ships as a Mac app) -- but the
+## link target is generated, not tracked: cmux-gen-config merges the gitignored
+## cmux/cmux.local.json (host overrides) over the tracked cmux/cmux.default.json.
+## cmux.json has no include mechanism and beats the app's saved Settings, so a
+## tracked target would make its keys impossible to override per host.
 ##
-## The file this replaces is cmux's own all-commented template, which the app
-## rewrites whenever the path is missing -- so the backup below is a courtesy,
-## not the only copy. Settings absent from the tracked file keep whatever value
-## the app has saved; `cmux reload-config' picks up an edit without a restart.
+## The generator is also the standalone regen path: after editing either source,
+## `cmux-gen-config' rewrites the merge and reloads cmux -- no re-run of this
+## script needed. It refuses to silently overwrite a target it did not write.
+##
+## The file the link replaces is cmux's own all-commented template, which the
+## app rewrites whenever the path is missing -- so the backup below is a
+## courtesy, not the only copy.
 
 say ""
 say "== ~/.config/cmux/cmux.json"
 
+typeset -g CMUX_DEFAULT=$REPO/cmux/cmux.default.json
 typeset -g CMUX_SRC=$REPO/cmux/cmux.json
 typeset -g CMUX_LINK=$HOME/.config/cmux/cmux.json
+
+typeset -g gen_out= gen_line=
+typeset -ga gen_flags=()
+(( DRY_RUN )) && gen_flags=(--dry-run)
+if [[ $OSTYPE == darwin* && -r $CMUX_DEFAULT ]]; then
+    if (( ! $+commands[python3] )); then
+        # A stale generated file keeps working; only regeneration needs python.
+        warn "python3 missing -- cannot regenerate cmux.json from its sources"
+    else
+        gen_out=$($REPO/bin/cmux-gen-config $gen_flags 2>&1)
+        if (( $? )); then
+            warn "cmux-gen-config failed:"
+            for gen_line in ${(f)gen_out}; do warn "$gen_line"; done
+            exit 1
+        fi
+        for gen_line in ${(f)gen_out}; do note "$gen_line"; done
+    fi
+fi
 
 if [[ $OSTYPE != darwin* ]]; then
     note "not macOS -- cmux does not run here"
     SKIPPED+=("~/.config/cmux/cmux.json (not macOS)")
 elif [[ ! -r $CMUX_SRC ]]; then
-    note "no cmux/cmux.json in the repo -- nothing to link"
+    note "no generated cmux/cmux.json -- nothing to link"
     SKIPPED+=("~/.config/cmux/cmux.json (nothing to link)")
 elif [[ -L $CMUX_LINK && ${CMUX_LINK:A} == ${CMUX_SRC:A} ]]; then
     note "already linked to ${CMUX_SRC/#$HOME/~}"

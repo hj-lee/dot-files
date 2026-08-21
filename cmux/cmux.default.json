@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/manaflow-ai/cmux/main/web/data/cmux.schema.json",
+  "schemaVersion": 1,
+
+  // The tracked default layer: cmux-gen-config deep-merges the gitignored
+  // cmux.local.json (host overrides) over this file into the generated
+  // cmux.json that ~/.config/cmux/cmux.json links to. After editing either
+  // source, run `cmux-gen-config' -- it rewrites the merge and reloads cmux.
+  //
+  // JSONC: cmux reads its config with comments allowed, and so does the merge.
+  // Only settings worth forcing on every host belong here -- a key left out of
+  // the generated file falls back to whatever the app's Settings has saved, so
+  // there is no need to carry cmux's full commented template around.
+
+  // 110 is the smallest step above the 100% design size: the schema allows 50-200
+  // in steps of 10, so this is a percentage, not a point size. Terminals, tab
+  // titles, sidebar, settings, and chrome all scale together; rendered browser
+  // pages do not (zoom those with Cmd-= / Cmd--).
+  "app": {
+    "globalFontMagnification": 110
+  }
+}
