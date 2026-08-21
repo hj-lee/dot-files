@@ -174,9 +174,10 @@ shell* needs it:
 | `local-zsh-init.zsh` | `init.zsh`, after oh-my-zsh | zsh-only: prompt, widgets, functions |
 | `local-common-init.sh` | `common-bash-zsh-init.sh` | anything bash must see too |
 
-`DEFAULT_USER`, a Homebrew `shellenv`, and a build system's shell completion are all examples of what
-belongs in one of these rather than in a tracked file. `setup-zsh.zsh` does not create them; add one
-when you need it.
+`DEFAULT_USER`, `PROMPT_HOST` (the short host label `init.zsh`'s `prompt_context` shows in place of
+`%m`, so a 26-character `dev-dsk-…` does not lead every prompt), a Homebrew `shellenv`, and a build
+system's shell completion are all examples of what belongs in one of these rather than in a tracked
+file. `setup-zsh.zsh` does not create them; add one when you need it.
 
 ## Claude Code
 

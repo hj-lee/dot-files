@@ -23,6 +23,19 @@ alias -g W='| wc'
 # PROMPT=$'%F{cyan}%D %*\n%{%f%b%k%}$(build_prompt) '
 RPROMPT='%F{green}%D %*'
 
+## agnoster's prompt_context prints %n@%m, and on a dev desktop %m is a
+## 26-character dev-dsk-<user>-<az>-<id>. Substitute $PROMPT_HOST for the host
+## part when a host sets one (local-zsh-init.zsh), %m otherwise -- the condition
+## and colours are the theme's, so a machine with no $PROMPT_HOST keeps the stock
+## prompt exactly. Read at prompt time, not here, because local-zsh-init.zsh is
+## sourced at the end of this file.
+prompt_context() {
+    if [[ "$USERNAME" != "$DEFAULT_USER" || -n "$SSH_CLIENT" ]]; then
+        prompt_segment "$AGNOSTER_CONTEXT_BG" "$AGNOSTER_CONTEXT_FG" \
+            "%(!.%{%F{$AGNOSTER_STATUS_ROOT_FG}%}.)%n@${PROMPT_HOST:-%m}"
+    fi
+}
+
 if [[ -n "$CONTAINER_ID" ]]; then
     PROMPT='%{%f%b%k%}%S[$CONTAINER_ID]%s$(build_prompt) '
 fi
