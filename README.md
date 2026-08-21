@@ -209,6 +209,10 @@ Off by default, and deliberately not exported from any tracked file, because it 
 `claude-wd` runs a single `claude` under it instead, which is the better habit: an export outlives
 the run, and is inherited by every `claude` and MCP server started from the shell afterwards.
 
+`-q` covers the two callers that do not want a line of output: `claude-watchdog -q on` for an init
+file, and `claude-watchdog -q status` for a conditional or a `precmd`, which answers by exit status
+(0 on, 1 off) since it prints nothing.
+
 The variable is undocumented, so all of that is read out of the shipped binary rather than the docs
 — worth re-checking after a Claude Code update. It is parsed as a boolean, hence `1` to enable and
 unset (or `0`) to disable.
@@ -280,7 +284,7 @@ forward on its next invocation.
 | `add-to-path DIR`, `add-to-path-end DIR` | prepend/append if absent and a directory; idempotent |
 | `lpath`, `remove-path DIR` | list `$PATH` one entry per line; drop one entry |
 | `tmux-env-refresh` | re-reads `DISPLAY`/`WAYLAND_DISPLAY`/`SSH_AUTH_SOCK`/… from tmux each prompt, so a shell that predates a reconnect stops pointing at a dead socket |
-| `claude-watchdog [on [RETRIES]\|off\|status]` | turn Claude Code's [retry-watchdog mode](#retry-watchdog-mode) on for this shell; `RETRIES` sets `CLAUDE_CODE_MAX_RETRIES` too. No argument reports |
+| `claude-watchdog [-q] [on [RETRIES]\|off\|status]` | turn Claude Code's [retry-watchdog mode](#retry-watchdog-mode) on for this shell; `RETRIES` sets `CLAUDE_CODE_MAX_RETRIES` too. No argument reports; `-q` silences the report, and makes `status` answer by exit code (0 on, 1 off) |
 | `claude-wd [ARG...]` | one `claude` run under the watchdog, without exporting it into the shell |
 
 Global aliases (zsh), usable at the end of any command: `G` `Gi` → `| grep`, `| grep -i`;

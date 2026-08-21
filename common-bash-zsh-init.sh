@@ -263,12 +263,31 @@ function with-picker {
 # export from this file: it also stops a plain 5xx from falling back to
 # `fallbackModel', and a turn can sit for hours with nothing on screen.
 #
-#   claude-watchdog [on] [RETRIES]   export it into this shell
-#   claude-watchdog off              unset both variables again
-#   claude-watchdog status           report what this shell has set
+#   claude-watchdog [-q] [on] [RETRIES]   export it into this shell
+#   claude-watchdog [-q] off              unset both variables again
+#   claude-watchdog status                report what this shell has set
+#   claude-watchdog -q status             no output; exit 0 if on, 1 if off
 #
 # RETRIES sets CLAUDE_CODE_MAX_RETRIES as well; omit it to take the 300.
+#
+# -q silences the report, for an init file or a script. Since that leaves
+# `status' with no way to answer, quiet status answers with its exit status
+# instead -- `grep -q' rather than a mute `grep'. The loud form keeps returning
+# 0 whatever the state: a bare claude-watchdog is something you type, and
+# agnoster would paint the 1 as a failed command in the next prompt. Errors are
+# on stderr either way, and -q does not suppress them.
 function claude-watchdog {
+    local quiet=
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -q|--quiet) quiet=1; shift ;;
+            --)         shift; break ;;
+            -*)
+                echo "claude-watchdog: unknown option: $1" >&2
+                return 2 ;;
+            *) break ;;
+        esac
+    done
     local mode="${1:-status}"
     local retries
     case "$mode" in
@@ -285,11 +304,14 @@ function claude-watchdog {
                 export CLAUDE_CODE_MAX_RETRIES="$retries"
             fi
             export CLAUDE_CODE_RETRY_WATCHDOG=1
-            claude-watchdog status
+            # Skip the report rather than passing -q down to it: quiet status
+            # returns 1 when off, and `claude-watchdog -q off' handing that back
+            # would read as a failed toggle.
+            [[ -n $quiet ]] || claude-watchdog status
             ;;
         off)
             unset CLAUDE_CODE_RETRY_WATCHDOG CLAUDE_CODE_MAX_RETRIES
-            claude-watchdog status
+            [[ -n $quiet ]] || claude-watchdog status
             ;;
         status)
             # Read as a boolean on the other side, so 0 and false are off --
@@ -297,13 +319,16 @@ function claude-watchdog {
             # should still report honestly.
             case "${CLAUDE_CODE_RETRY_WATCHDOG:-}" in
                 ''|0|false)
+                    # Not quiet: the && falls through, and the echo below resets
+                    # $? to 0.
+                    [[ -n $quiet ]] && return 1
                     echo "claude-watchdog: off, max retries ${CLAUDE_CODE_MAX_RETRIES:-10}" ;;
                 *)
-                    echo "claude-watchdog: on, max retries ${CLAUDE_CODE_MAX_RETRIES:-300} -- no fallbackModel on 5xx" ;;
+                    [[ -n $quiet ]] || echo "claude-watchdog: on, max retries ${CLAUDE_CODE_MAX_RETRIES:-300} -- no fallbackModel on 5xx" ;;
             esac
             ;;
         *)
-            echo "claude-watchdog: usage: claude-watchdog [on [RETRIES]|off|status]" >&2
+            echo "claude-watchdog: usage: claude-watchdog [-q] [on [RETRIES]|off|status]" >&2
             return 2 ;;
     esac
 }
