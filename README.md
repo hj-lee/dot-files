@@ -140,7 +140,7 @@ Sourced in turn:
 | File | |
 |---|---|
 | `pre-omz-init.zsh` | mise, `PATH`, and the `add-to-path` helpers — everything that must precede oh-my-zsh |
-| `common-bash-zsh-init.sh` | shared with bash: aliases, `ssh-ecf`, `emacs-remote`, `magit`, `with-picker`, `tmux-env-refresh` |
+| `common-bash-zsh-init.sh` | shared with bash: aliases, `ssh-ecf`, `emacs-remote`, `magit`, `with-picker`, `tmux-env-refresh`, `claude-watchdog` |
 | `init.zsh` | zsh-only: prompt, global aliases, `remove-path` |
 | `init.bash` | the bash counterpart, including its own fzf integration |
 | `darwin-zsh-init.zsh` | macOS: Emacs.app, Android SDK, `~/.local/bin` |
@@ -195,6 +195,22 @@ Two reasons for the indirection rather than importing the other checkout directl
 host-specific, and this repo is public, so even the name of the other repo stays out of it. Claude
 Code resolves `@` imports up to four hops and skips one it cannot find, so a host without the local
 file loads the tracked half on its own.
+
+### Retry-watchdog mode
+
+`claude-watchdog` toggles `CLAUDE_CODE_RETRY_WATCHDOG`, the mode Claude Code sets for its own remote
+runners: the default retry count goes from 10 to 300, an explicit `CLAUDE_CODE_MAX_RETRIES` stops
+being clamped to 15, 429 and overload (529) stop counting against that limit at all, and a backoff
+over 60s no longer aborts the request. It is the knob for riding out an overloaded model.
+
+Off by default, and deliberately not exported from any tracked file, because it also stops a plain
+5xx from falling back to `fallbackModel` — and a turn can then sit for hours with nothing on screen.
+`claude-wd` runs a single `claude` under it instead, which is the better habit: an export outlives
+the run, and is inherited by every `claude` and MCP server started from the shell afterwards.
+
+The variable is undocumented, so all of that is read out of the shipped binary rather than the docs
+— worth re-checking after a Claude Code update. It is parsed as a boolean, hence `1` to enable and
+unset (or `0`) to disable.
 
 ## cmux
 
@@ -263,6 +279,8 @@ forward on its next invocation.
 | `add-to-path DIR`, `add-to-path-end DIR` | prepend/append if absent and a directory; idempotent |
 | `lpath`, `remove-path DIR` | list `$PATH` one entry per line; drop one entry |
 | `tmux-env-refresh` | re-reads `DISPLAY`/`WAYLAND_DISPLAY`/`SSH_AUTH_SOCK`/… from tmux each prompt, so a shell that predates a reconnect stops pointing at a dead socket |
+| `claude-watchdog [on [RETRIES]\|off\|status]` | turn Claude Code's [retry-watchdog mode](#retry-watchdog-mode) on for this shell; `RETRIES` sets `CLAUDE_CODE_MAX_RETRIES` too. No argument reports |
+| `claude-wd [ARG...]` | one `claude` run under the watchdog, without exporting it into the shell |
 
 Global aliases (zsh), usable at the end of any command: `G` `Gi` → `| grep`, `| grep -i`;
 `L` → `| less`; `W` → `| wc`.

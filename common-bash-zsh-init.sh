@@ -242,6 +242,80 @@ function with-picker {
 }
 
 
+####
+# Claude Code retry-watchdog mode
+#
+# CLAUDE_CODE_RETRY_WATCHDOG is the mode Claude Code sets for its own remote
+# runners. It is undocumented, so all of the below is read out of the shipped
+# binary rather than the docs, and an update could change it:
+#
+#  - the default retry count becomes 300 instead of 10, and an explicit
+#    CLAUDE_CODE_MAX_RETRIES stops being clamped to 15;
+#  - 429 and overload (529 / "overloaded_error") no longer count against that
+#    limit at all, so those two never exhaust;
+#  - a computed backoff over 60s no longer aborts the request -- waits are
+#    honoured up to a 6-hour ceiling;
+#  - repeated 529s stop raising the "overloaded" error, and a 529 on a
+#    non-interactive caller stops being dropped.
+#
+# Which is to say: it trades failing fast for eventually succeeding, on the
+# assumption nobody is watching. Two reasons it is a toggle rather than an
+# export from this file: it also stops a plain 5xx from falling back to
+# `fallbackModel', and a turn can sit for hours with nothing on screen.
+#
+#   claude-watchdog [on] [RETRIES]   export it into this shell
+#   claude-watchdog off              unset both variables again
+#   claude-watchdog status           report what this shell has set
+#
+# RETRIES sets CLAUDE_CODE_MAX_RETRIES as well; omit it to take the 300.
+function claude-watchdog {
+    local mode="${1:-status}"
+    local retries
+    case "$mode" in
+        on)
+            retries="$2"
+            if [[ -n $retries ]]; then
+                # A non-numeric value parses to NaN and is silently ignored,
+                # leaving the 300 default -- so reject it here instead.
+                case "$retries" in
+                    *[!0-9]*)
+                        echo "claude-watchdog: RETRIES must be a non-negative integer: $retries" >&2
+                        return 2 ;;
+                esac
+                export CLAUDE_CODE_MAX_RETRIES="$retries"
+            fi
+            export CLAUDE_CODE_RETRY_WATCHDOG=1
+            claude-watchdog status
+            ;;
+        off)
+            unset CLAUDE_CODE_RETRY_WATCHDOG CLAUDE_CODE_MAX_RETRIES
+            claude-watchdog status
+            ;;
+        status)
+            # Read as a boolean on the other side, so 0 and false are off --
+            # which `off' above reaches by unsetting, but a hand-set value
+            # should still report honestly.
+            case "${CLAUDE_CODE_RETRY_WATCHDOG:-}" in
+                ''|0|false)
+                    echo "claude-watchdog: off, max retries ${CLAUDE_CODE_MAX_RETRIES:-10}" ;;
+                *)
+                    echo "claude-watchdog: on, max retries ${CLAUDE_CODE_MAX_RETRIES:-300} -- no fallbackModel on 5xx" ;;
+            esac
+            ;;
+        *)
+            echo "claude-watchdog: usage: claude-watchdog [on [RETRIES]|off|status]" >&2
+            return 2 ;;
+    esac
+}
+
+# One claude run with the watchdog on, leaving the shell alone. Prefer this to
+# the toggle: an export outlives the run, and is inherited by every claude --
+# and every MCP server -- started from the shell afterwards.
+function claude-wd {
+    CLAUDE_CODE_RETRY_WATCHDOG=1 command claude "$@"
+}
+
+
 ###
 ## Mirrors pre-omz-init.zsh, which does this for zsh before oh-my-zsh; see the
 ## note there on why $DIR/bin is listed first and so ranks lowest.
